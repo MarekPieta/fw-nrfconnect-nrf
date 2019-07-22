@@ -1,0 +1,81 @@
+#
+# Copyright (c) 2019 Nordic Semiconductor ASA
+#
+# SPDX-License-Identifier: LicenseRef-BSD-5-Clause-Nordic
+
+StackLayout:
+    StackLayout:
+        size_hint_y: 0.08
+        __safe_id: [dropdown.__self__]
+        Button:
+            id: btn
+            text: 'Select device'
+            on_release: dropdown.open(self)
+            size_hint_y: None
+            height: '48dp'
+            on_press: app.update_device_list()
+        Widget:
+            on_parent: dropdown.dismiss()
+        DropDown:
+
+            id: dropdown
+            on_select: btn.text = 'Selected device: {}'.format(args[1])
+    StackLayout:
+        TabbedPanel:
+            id: tp
+            do_default_tab: False
+            TabbedPanelItem:
+                id: settings_tab
+                text:'Settings'
+                StackLayout:
+                    id: settings_tab_layout
+
+                    Label:
+                        size_hint_y: None
+                        id: fwinfo_label
+                        text: 'Please select device'
+                    Label:
+                        size_hint_y: None
+                        id: settings_label
+                    GridLayout:
+                        cols:1
+                        id: possible_settings_place
+            TabbedPanelItem:
+                id: firmware_tab
+                text:'DFU'
+                StackLayout:
+                    Label:
+                        size_hint_y: None
+                        id: update_label
+                        text: 'Firmware Update'
+<MouseOptions>:
+    cols:1
+    GridLayout:
+        cols:2
+        BoxLayout:
+            size_hint_y: None
+            height: '48dp'
+
+            Label:
+                text: 'CPI'
+            Slider:
+                index: 0
+                id: cpi_s
+                value: app.fetchcpi_callback()
+                step: 100
+                max: 12000
+                min: 100
+                on_touch_up: if self.collide_point(*args[1].pos): app.setcpi_callback(self.value)
+            Label:
+                text: '{:.0f}'.format(cpi_s.value)
+        BoxLayout:
+            size_hint_y: None
+            height: '48dp'
+            Label:
+                text: 'LED'
+            Switch:
+                disabled: True
+                active: False
+        BoxLayout:
+            size_hint_y: None
+            height: '48dp'
