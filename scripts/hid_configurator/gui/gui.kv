@@ -48,6 +48,18 @@ StackLayout:
                         size_hint_y: None
                         id: update_label
                         text: 'Firmware Update'
+                    GridLayout:
+                        cols:1
+                        Button:
+                            size_hint_y: None
+                            height: '48dp'
+                            text: 'Choose update file'
+                            on_release: app.show_load_list()
+                        Button:
+                            size_hint_y: None
+                            height: '48dp'
+                            text: 'Start uploading to device'
+
 <MouseOptions>:
     cols:1
     GridLayout:
@@ -79,3 +91,22 @@ StackLayout:
         BoxLayout:
             size_hint_y: None
             height: '48dp'
+
+<LoadDialog>:
+    BoxLayout:
+        size: root.size
+        pos: root.pos
+        orientation: "vertical"
+        FileChooserListView:
+            id: filechooser
+            path: './'
+            filters: ['*.bin']
+        BoxLayout:
+            size_hint_y: None
+            height: 30
+            Button:
+                text: "Cancel"
+                on_release: root.cancel()
+            Button:
+                text: "Load"
+                on_release: root.load(filechooser.path, filechooser.selection)

@@ -5,8 +5,11 @@
 
 from kivy.app import App
 from kivy.config import Config
+from kivy.properties import ObjectProperty
 from kivy.uix.button import Button
+from kivy.uix.floatlayout import FloatLayout
 from kivy.uix.gridlayout import GridLayout
+from kivy.uix.popup import Popup
 
 from configurator_gui import KEYBOARD_PID, MOUSE_PID, NORDIC_VID, get_device_type_from_pid, Device
 
@@ -101,6 +104,24 @@ class Gui(App):
 
     def on_start(self):
         print('Start Hello')
+
+    def show_load_list(self):
+        content = LoadDialog(load=self.load_list, cancel=self.dismiss_popup)
+        self._popup = Popup(title="Load a file list", content=content, size_hint=(0.9, 0.9))
+        self._popup.open()
+
+    def load_list(self, path, filename):
+        print(path)
+        print(filename)
+        self.dismiss_popup()
+
+    def dismiss_popup(self):
+        self._popup.dismiss()
+
+
+class LoadDialog(FloatLayout):
+    load = ObjectProperty(None)
+    cancel = ObjectProperty(None)
 
 
 if __name__ == '__main__':
