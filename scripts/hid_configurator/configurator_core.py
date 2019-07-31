@@ -10,7 +10,6 @@ import struct
 import time
 import zlib
 
-import argparse
 import logging
 import collections
 
@@ -50,7 +49,6 @@ POLL_RETRY_COUNT = 200
 
 DFU_SYNC_RETRIES = 3
 DFU_SYNC_INTERVAL = 1
-
 
 PMW3360_OPTIONS = {
     'downshift_run':    ConfigOption((10,   2550),   SENSOR_OPT_DOWNSHIFT_RUN,   'Run to Rest 1 switch time [ms]'),
@@ -126,6 +124,7 @@ class ConfigStatus(IntEnum):
     DISCONNECTED_ERROR = 6
     FAULT              = 99
 
+
 class Response(object):
     def __init__(self, recipient, event_id, status, data):
         self.recipient = recipient
@@ -177,18 +176,22 @@ class Response(object):
         return Response(rcpt, event_id, status, event_data)
 
 
-def progress_bar(permil):
-    LENGTH = 40
-    done_len = LENGTH * permil // 1000
-    progress_line = '[' + '*' * done_len + '-' * (LENGTH - done_len) + ']'
-    percent = permil / 10.0
-    print('\r{} {}%'.format(progress_line, percent), end='')
+class FwInfo:
+    def __init__(self, values):
+        flash_area_id, image_len, ver_major, ver_minor, ver_rev, ver_build_nr = values
+        self.flash_area_id = flash_area_id
+        self.image_len = image_len
+        self.ver_major = ver_major
+        self.ver_minor = ver_minor
+        self.ver_rev = ver_rev
+        self.ver_build_nr = ver_build_nr
 
-
-def check_range(value, value_range):
-    if value > value_range[1] or value < value_range[0]:
-        return False
-    return True
+    def __str__(self):
+        return ('Firmware info\n'
+                '  FLASH area id: {}\n'
+                '  Image length: {}\n'
+                '  Version: {}.{}.{}.{}').format(self.flash_area_id, self.image_len, self.ver_major, self.ver_minor,
+                                                 self.ver_rev, self.ver_build_nr)
 
 
 def create_set_report(recipient, event_id, event_data):
@@ -196,10 +199,10 @@ def create_set_report(recipient, event_id, event_data):
         value.
         Recipient is a device product ID. """
 
-    assert(type(recipient) == int)
-    assert(type(event_id) == int)
+    assert type(recipient) == int
+    assert type(event_id) == int
     if event_data:
-        assert(type(event_data) == bytes)
+        assert type(event_data) == bytes
         event_data_len = len(event_data)
 
     status = ConfigStatus.PENDING
@@ -208,7 +211,7 @@ def create_set_report(recipient, event_id, event_data):
     if event_data:
         report += event_data
 
-    assert(len(report) <= REPORT_SIZE)
+    assert len(report) <= REPORT_SIZE
     report += b'\0' * (REPORT_SIZE - len(report))
 
     return report
@@ -219,16 +222,23 @@ def create_fetch_report(recipient, event_id):
         a configuration value from a device.
         Recipient is a device product ID. """
 
-    assert(type(recipient) == int)
-    assert(type(event_id) == int)
+    assert type(recipient) == int
+    assert type(event_id) == int
 
     status = ConfigStatus.FETCH
     report = struct.pack('<BHBBB', REPORT_ID, recipient, event_id, status, 0)
 
-    assert(len(report) <= REPORT_SIZE)
+    assert len(report) <= REPORT_SIZE
     report += b'\0' * (REPORT_SIZE - len(report))
 
     return report
+
+
+def check_range(value, value_range):
+    if value > value_range[1] or value < value_range[0]:
+        return False
+
+    return True
 
 
 def exchange_feature_report(dev, recipient, event_id, event_data, is_fetch):
@@ -266,6 +276,7 @@ def exchange_feature_report(dev, recipient, event_id, event_data, is_fetch):
 
     fetched_data = None
     success = False
+
     if op_status == ConfigStatus.SUCCESS:
         logging.info('Success')
         success = True
@@ -276,7 +287,27 @@ def exchange_feature_report(dev, recipient, event_id, event_data, is_fetch):
 
     if is_fetch:
         return success, fetched_data
+
     return success
+
+
+def file_crc(dfu_image):
+    crc32 = 1
+
+    img_file = open(dfu_image, "rb")
+
+    if img_file is None:
+        return None
+
+    while True:
+        chunk_data = img_file.read(512)
+        if len(chunk_data) == 0:
+            break;
+        crc32 = zlib.crc32(chunk_data, crc32)
+
+    img_file.close()
+
+    return crc32
 
 
 def get_device_pid(device_type):
@@ -285,6 +316,13 @@ def get_device_pid(device_type):
 
 def get_device_vid(device_type):
     return DEVICE[device_type]['vid']
+
+
+def get_device_type(pid):
+    for device_type in DEVICE:
+        if DEVICE[device_type]['pid'] == pid:
+            return device_type
+    return None
 
 
 def open_device(device_type):
@@ -296,8 +334,8 @@ def open_device(device_type):
 
     for i in devlist:
         try:
-            vid=get_device_vid(i)
-            pid=get_device_pid(i)
+            vid = get_device_vid(i)
+            pid = get_device_pid(i)
             dev = hid.Device(vid=vid, pid=pid)
             break
         except hid.HIDException:
@@ -315,9 +353,77 @@ def open_device(device_type):
     return dev
 
 
-def dfu_sync(dev, args):
+def fwinfo(dev, recipient):
+    event_id = (EVENT_GROUP_DFU << GROUP_FIELD_POS) | (DFU_IMGINFO << TYPE_FIELD_POS)
+
+    try:
+        success, fetched_data = exchange_feature_report(dev, recipient, event_id, None, True)
+    except:
+        success = False
+
+    if success and fetched_data:
+        fmt = '<BIBBHI'
+        assert struct.calcsize(fmt) <= EVENT_DATA_LEN_MAX
+        vals = struct.unpack(fmt, fetched_data)
+        fw_info = FwInfo(vals)
+        return fw_info
+    else:
+        return None
+
+
+def fwreboot(dev, recipient):
+    event_id = (EVENT_GROUP_DFU << GROUP_FIELD_POS) | (DFU_REBOOT << TYPE_FIELD_POS)
+
+    try:
+        success, _ = exchange_feature_report(dev, recipient, event_id, None, True)
+    except:
+        success = False
+
+    return success
+
+
+def change_config(dev, recipient, config_name, config_value, device_options, module_id):
+    config_opts = device_options[config_name]
+    opt_id = config_opts.event_id
+    event_id = (EVENT_GROUP_SETUP << GROUP_FIELD_POS) | (module_id << MOD_FIELD_POS) | (opt_id << OPT_FIELD_POS)
+    value_range = config_opts.range
+    logging.debug('Send request to update {}: {}'.format(config_name, config_value))
+
+    if not check_range(config_value, value_range):
+        print('Failed. Config value for {} must be in range {}'.format(config_name, value_range))
+        return False
+
+    event_data = struct.pack('<I', config_value)
+
+    try:
+        success = exchange_feature_report(dev, recipient, event_id, event_data, False)
+    except:
+        success = False
+
+    return success
+
+
+def fetch_config(dev, recipient, config_name, device_options, module_id):
+    config_opts = device_options[config_name]
+    opt_id = config_opts.event_id
+    event_id = (EVENT_GROUP_SETUP << GROUP_FIELD_POS) | (module_id << MOD_FIELD_POS) | (opt_id << OPT_FIELD_POS)
+    logging.debug('Fetch the current value of {} from the firmware'.format(config_name))
+
+    try:
+        success, fetched_data = exchange_feature_report(dev, recipient, event_id, None, True)
+    except:
+        success = False
+
+    if success and fetched_data:
+        val = int.from_bytes(fetched_data, byteorder='little')
+    else:
+        val = None
+
+    return success, val
+
+
+def dfu_sync(dev, recipient):
     event_id = (EVENT_GROUP_DFU << GROUP_FIELD_POS) | (DFU_SYNC << TYPE_FIELD_POS)
-    recipient = get_device_pid(args.device_type)
 
     try:
         success, fetched_data = exchange_feature_report(dev, recipient, event_id, None, True)
@@ -328,7 +434,7 @@ def dfu_sync(dev, args):
         return None
 
     fmt = '<BIII'
-    assert(struct.calcsize(fmt) <= EVENT_DATA_LEN_MAX)
+    assert struct.calcsize(fmt) <= EVENT_DATA_LEN_MAX
 
     if (fetched_data is None) or (len(fetched_data) < struct.calcsize(fmt)):
         return None
@@ -336,9 +442,11 @@ def dfu_sync(dev, args):
     return struct.unpack(fmt, fetched_data)
 
 
-def dfu_start(dev, args, img_length, img_csum, offset):
+def dfu_start(dev, recipient, img_length, img_csum, offset):
+    # Start DFU operation at selected offset.
+    # It can happen that device will reject this request - this will be
+    # verified by dfu sync at data exchange.
     event_id = (EVENT_GROUP_DFU << GROUP_FIELD_POS) | (DFU_START << TYPE_FIELD_POS)
-    recipient = get_device_pid(args.device_type)
 
     event_data = struct.pack('<III', img_length, img_csum, offset)
 
@@ -368,14 +476,15 @@ def file_crc(dfu_image):
     return crc32
 
 
-def dfu_sync_wait(dev, args, is_active):
+def dfu_sync_wait(dev, recipient, is_active):
     if is_active:
         dfu_state = 0x01
     else:
         dfu_state = 0x00
 
     for i in range(DFU_SYNC_RETRIES):
-        dfu_info = dfu_sync(dev, args)
+        dfu_info = dfu_sync(dev, recipient)
+
         if dfu_info is not None:
             if dfu_info[0] != dfu_state:
                 # DFU may be transiting its state. This can happen when previous
@@ -384,87 +493,47 @@ def dfu_sync_wait(dev, args, is_active):
                 time.sleep(DFU_SYNC_INTERVAL)
             else:
                 break
+
     return dfu_info
 
 
-def perform_dfu(dev, args):
-    dfu_image = args.dfu_image
-    event_id = (EVENT_GROUP_DFU << GROUP_FIELD_POS) | (DFU_DATA << TYPE_FIELD_POS)
-    recipient = get_device_pid(args.device_type)
+def dfu(dev, recipient, dfu_image, progress_callback):
+    success = dfu_transfer(dev, recipient, dfu_image, progress_callback)
 
-    if not os.path.isfile(dfu_image):
-        print('DFU image file does not exists')
-        return
+    if success:
+        success = fwreboot(dev, recipient)
 
-    img_length = os.stat(dfu_image).st_size
-    if img_length <= 0:
-        print('DFU image is empty')
-        return
-
-    print('DFU image size: {} bytes'.format(img_length))
-
-    # Check there is no other DFU operation.
-    dfu_info = dfu_sync_wait(dev, args, False)
-    if dfu_info is None:
-        print('Cannot start DFU, device not responding')
-        return
-
-    if dfu_info[0] != 0:
-        print('Cannot start DFU, already in progress')
-        return
-
-    # Check if the previously interrupted DFU operation can be resumed.
-    img_csum = file_crc(dfu_image)
-    if (dfu_info[1] == img_length) and (dfu_info[2] == img_csum) and (dfu_info[3] <= img_length):
-        print('Resume DFU at {}'.format(dfu_info[3]))
-        offset = dfu_info[3]
+    if not success:
+        print('DFU transfer failed')
+        return False
     else:
-        offset = 0
+        print('DFU transfer completed')
+        return True
 
-    # Start DFU operation at selected offset.
-    # It can happen that device will reject this request - this will be
-    # verified by dfu sync at data exchange.
-    success = dfu_start(dev, args, img_length, img_csum, offset)
+
+def dfu_transfer(dev, recipient, dfu_image, progress_callback):
+    img_length = os.stat(dfu_image).st_size
+    dfu_info = dfu_sync_wait(dev, recipient, False)
+
+    if not is_ok(dfu_image):
+        return False
+
+    if is_other_dfu_operation(dfu_info):
+        return False
+
+    offset = find_offset(dfu_image, dfu_info)
+    img_csum = file_crc(dfu_image)
+    success = dfu_start(dev, recipient, img_length, img_csum, offset)
+
     if not success:
         print('Cannot start DFU operation')
+        return False
 
     img_file = open(dfu_image, 'rb')
     img_file.seek(offset)
 
     try:
-        while offset < img_length:
-            if offset % FLASH_PAGE_SIZE == 0:
-                # Sync DFU state at regular intervals to ensure everything
-                # is all right.
-                success = False
-                dfu_info = dfu_sync(dev, args)
-                if dfu_info is None:
-                    print('Lost communication with the device')
-                    break
-                if dfu_info[0] == 0:
-                    print('DFU interrupted by device')
-                    break
-                if (dfu_info[1] != img_length) or (dfu_info[2] != img_csum) or (dfu_info[3] != offset):
-                    print('Invalid sync information')
-                    break
-
-            chunk_data = img_file.read(EVENT_DATA_LEN_MAX)
-            chunk_len = len(chunk_data)
-            if chunk_len == 0:
-                break
-
-            logging.debug('Send DFU request: offset {}, size {}'.format(offset, chunk_len))
-
-            progress_bar(int(offset/img_length * 1000))
-            try:
-                success = exchange_feature_report(dev, recipient, event_id, chunk_data, False)
-            except:
-                success = False
-            if not success:
-                print('Lost communication with the device')
-                break
-
-            offset += chunk_len
+        offset, success = send_chunk(dev, img_csum, img_file, img_length, offset, recipient, success, progress_callback)
     except:
         success = False
 
@@ -475,7 +544,8 @@ def perform_dfu(dev, args):
         print('DFU transfer completed')
         success = False
 
-        dfu_info = dfu_sync_wait(dev, args, False)
+        dfu_info = dfu_sync_wait(dev, recipient, False)
+
         if dfu_info is None:
             print('Lost communication with the device')
         else:
@@ -484,160 +554,99 @@ def perform_dfu(dev, args):
             elif dfu_info[3] != offset:
                 print('Device holds incorrect image offset')
             else:
-                success = perform_fwreboot(dev, args)
-
-    if not success:
-        print('DFU transfer failed')
-    else:
-        print('DFU completed')
-
-
-def perform_config(dev, args):
-    module_config = DEVICE[args.device_type]['config'][args.module]
-    module_id = module_config['id']
-    options = module_config['options']
-
-    config_name  = args.option
-    config_opts  = options[config_name]
-
-    value_range  = config_opts.range
-    opt_id       = config_opts.event_id
-
-    recipient = get_device_pid(args.device_type)
-    event_id = (EVENT_GROUP_SETUP << GROUP_FIELD_POS) | (module_id << MOD_FIELD_POS) | (opt_id << OPT_FIELD_POS)
-
-    if args.value is None:
-        logging.debug('Fetch the current value of {} from the firmware'.format(config_name))
-        try:
-            success, fetched_data = exchange_feature_report(dev, recipient, event_id, None, True)
-        except:
-            success = False
-
-        if success and fetched_data:
-            val = int.from_bytes(fetched_data, byteorder='little')
-            print('Fetched {}: {}'.format(config_name, val))
-        else:
-            print('Failed to fetch {}'.format(config_name))
-    else:
-        config_value = int(args.value)
-        logging.debug('Send request to update {}: {}'.format(config_name, config_value))
-        if not check_range(config_value, value_range):
-            print('Failed. Config value for {} must be in range {}'.format(config_name, value_range))
-            return
-
-        event_data = struct.pack('<I', config_value)
-        try:
-            success = exchange_feature_report(dev, recipient, event_id, event_data, False)
-        except:
-            success = False
-
-        if success:
-            print('{} set to {}'.format(config_name, config_value))
-        else:
-            print('Failed to set {}'.format(config_name))
-
-
-def perform_fwinfo(dev, args):
-    event_id = (EVENT_GROUP_DFU << GROUP_FIELD_POS) | (DFU_IMGINFO << TYPE_FIELD_POS)
-    recipient = get_device_pid(args.device_type)
-
-    try:
-        success, fetched_data = exchange_feature_report(dev, recipient, event_id, None, True)
-    except:
-        success = False
-
-    if success and fetched_data:
-        fmt = '<BIBBHI'
-        assert(struct.calcsize(fmt) <= EVENT_DATA_LEN_MAX)
-
-        (flash_area_id, image_len, ver_major, ver_minor, ver_rev, ver_build_nr) = struct.unpack(fmt, fetched_data)
-        print(('Firmware info\n'
-               '\tFLASH area id: {}\n'
-               '\tImage length: {}\n'
-               '\tVersion: {}.{}.{}.{}').format(flash_area_id,
-                                                image_len,
-                                                ver_major,
-                                                ver_minor,
-                                                ver_rev,
-                                                ver_build_nr))
-    else:
-        print('FW info request failed')
-
-
-def perform_fwreboot(dev, args):
-    event_id = (EVENT_GROUP_DFU << GROUP_FIELD_POS) | (DFU_REBOOT << TYPE_FIELD_POS)
-    recipient = get_device_pid(args.device_type)
-
-    try:
-        success, fetched_data = exchange_feature_report(dev, recipient, event_id, None, True)
-    except:
-        success = False
-
-    if success:
-        print('Firmware rebooted')
-    else:
-        print('FW reboot request failed')
-
+                success = True
     return success
 
 
-def configurator():
-    logging.basicConfig(level=logging.ERROR)
-    logging.info('Configuration channel for nRF52 Desktop')
+def send_chunk(dev, img_csum, img_file, img_length, offset, recipient, success, progress_callback):
+    event_id = (EVENT_GROUP_DFU << GROUP_FIELD_POS) | (DFU_DATA << TYPE_FIELD_POS)
 
-    parser = argparse.ArgumentParser()
-    sp_devices = parser.add_subparsers(dest='device_type')
-    sp_devices.required = True
-    for device_name in DEVICE:
-        device_parser = sp_devices.add_parser(device_name)
+    while offset < img_length:
+        if offset % FLASH_PAGE_SIZE == 0:
+            # Sync DFU state at regular intervals to ensure everything
+            # is all right.
+            success = False
+            dfu_info = dfu_sync(dev, recipient)
 
-        sp_commands = device_parser.add_subparsers(dest='command')
-        sp_commands.required = True
+            if dfu_info is None:
+                print('Lost communication with the device')
+                break
+            if dfu_info[0] == 0:
+                print('DFU interrupted by device')
+                break
+            if (dfu_info[1] != img_length) or (dfu_info[2] != img_csum) or (dfu_info[3] != offset):
+                print('Invalid sync information')
+                break
 
-        parser_dfu = sp_commands.add_parser('dfu', help='Run DFU')
-        parser_dfu.add_argument('dfu_image', type=str, help='Path to a DFU image')
+        chunk_data = img_file.read(EVENT_DATA_LEN_MAX)
+        chunk_len = len(chunk_data)
 
-        sp_commands.add_parser('fwinfo', help='Obtain information about FW image')
-        sp_commands.add_parser('fwreboot', help='Request FW reboot')
+        if chunk_len == 0:
+            break
 
-        device_config = DEVICE[device_name]['config']
-        if device_config is not None:
-            assert(type(device_config) == dict)
-            parser_config = sp_commands.add_parser('config', help='Configuration option get/set')
+        logging.debug('Send DFU request: offset {}, size {}'.format(offset, chunk_len))
 
-            sp_config = parser_config.add_subparsers(dest='module')
-            sp_config.required = True
+        progress_callback(int(offset / img_length * 1000))
 
-            for module_name in device_config:
-                module_config = device_config[module_name]
-                assert(type(module_config) == dict)
-                module_opts = module_config['options']
-                assert(type(module_opts) == dict)
+        try:
+            success = exchange_feature_report(dev, recipient, event_id, chunk_data, False)
+        except:
+            success = False
 
-                parser_config_module = sp_config.add_parser(module_name, help='{} module options'.format(module_name))
-                sp_config_module = parser_config_module.add_subparsers(dest='option')
-                sp_config_module.required = True
+        if not success:
+            print('Lost communication with the device')
+            break
 
-                for opt_name in module_opts:
-                    parser_config_module_opt = sp_config_module.add_parser(opt_name, help=module_opts[opt_name].help)
-                    parser_config_module_opt.add_argument('value', type=int, default=None, nargs='?', help='int from range {}'.format(module_opts[opt_name].range))
-    args = parser.parse_args()
+        offset += chunk_len
 
-    dev = open_device(args.device_type)
-    if not dev:
-        return
+    return offset, success
 
-    if args.command == 'dfu':
-        perform_dfu(dev, args)
-    elif args.command == 'fwinfo':
-        perform_fwinfo(dev, args)
-    elif args.command == 'fwreboot':
-        perform_fwreboot(dev, args)
-    elif args.command == 'config':
-        perform_config(dev, args)
+
+def find_offset(dfu_image, dfu_info):
+    # Check if the previously interrupted DFU operation can be resumed.
+    img_length = os.stat(dfu_image).st_size
+    img_csum = file_crc(dfu_image)
+
+    if (dfu_info[1] == img_length) and (dfu_info[2] == img_csum) and (dfu_info[3] <= img_length):
+        print('Resume DFU at {}'.format(dfu_info[3]))
+        offset = dfu_info[3]
+    else:
+        offset = 0
+
+    return offset
+
+
+def is_other_dfu_operation(dfu_info):
+    # Check there is no other DFU operation.
+    if dfu_info is None:
+        print('Cannot start DFU, device not responding')
+        return True
+
+    if dfu_info[0] != 0:
+        print('Cannot start DFU, already in progress')
+        return True
+
+    return False
+
+
+def is_ok(dfu_image):
+    if not os.path.isfile(dfu_image):
+        print('DFU image file does not exists')
+        return False
+
+    img_length = os.stat(dfu_image).st_size
+
+    if img_length <= 0:
+        print('DFU image is empty')
+        return False
+
+    print('DFU image size: {} bytes'.format(img_length))
+
+    return True
+
 
 if __name__ == '__main__':
     try:
-        configurator()
+        print("Please run configurator_cli.py to start application")
     except KeyboardInterrupt:
         pass
