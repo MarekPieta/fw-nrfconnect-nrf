@@ -15,6 +15,7 @@
 #include "leds_def.h"
 
 #define MODULE leds
+#define LED_STREEM_LOOP_SIZE 100
 #include "module_state_event.h"
 
 #include <logging/log.h>
@@ -26,7 +27,7 @@ struct led {
 
 	size_t id;
 	struct led_color color;
-	const struct led_effect *effect;
+	struct led_effect *effect;
 	u16_t effect_step;
 	u16_t effect_substep;
 
@@ -72,10 +73,33 @@ static void work_handler(struct k_work *work)
 		led->effect_substep = 0;
 		led->effect_step++;
 
+        if (led->effect->stream){
+            led->effect->actual_step=led->effect_step;
+            if (led->effect->step_count == LED_STREEM_LOOP_SIZE && led->effect->actual_step <= led->effect->next_free_step +1){
+                led->effect->step_count = led->effect->next_free_step+1;
+                led->effect->loop_forever = false;
+            }
+            LOG_INF("////// LEDS led->effect_step: %d", led->effect_step);
+            LOG_INF("////// LEDS led->effect->actual_step: %d", led->effect->actual_step);
+            LOG_INF("////// LEDS led->effect->step_count: %d", led->effect->step_count);
+            LOG_INF("////// LEDS led->effect->next_free_step: %d", led->effect->next_free_step);
+            int free_steps_left;
+            if (led->effect->actual_step <= led->effect->next_free_step + 1) {
+                free_steps_left = led->effect->actual_step + LED_STREEM_LOOP_SIZE - led->effect->next_free_step -1;
+            } else {
+                free_steps_left = led->effect->actual_step - led->effect->next_free_step;
+            }
+            LOG_INF("////// LEDS free steps: %d", free_steps_left);
+        }
+
 		if (led->effect_step == led->effect->step_count) {
 			if (led->effect->loop_forever) {
 				led->effect_step = 0;
-			}
+			} else {
+                if (led->effect->stream) {
+                    led->effect->stream = false;
+                }
+            }
 		} else {
 			__ASSERT_NO_MSG(led->effect->steps[led->effect_step].substep_count > 0);
 		}
@@ -189,7 +213,7 @@ static bool event_handler(const struct event_header *eh)
 	static bool initialized;
 
 	if (is_led_event(eh)) {
-		const struct led_event *event = cast_led_event(eh);
+		struct led_event *event = cast_led_event(eh);
 
 		__ASSERT_NO_MSG(event->led_id < CONFIG_DESKTOP_LED_COUNT);
 

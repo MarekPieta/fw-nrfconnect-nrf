@@ -37,8 +37,9 @@ extern "C" {
 #define CONFIG_EVENT_ID(group, type) ((u8_t)(GROUP_FIELD_SET(group) | \
 					     TYPE_FIELD_SET(type)))
 
-#define EVENT_GROUP_SETUP	0x1
-#define EVENT_GROUP_DFU		0x2
+#define EVENT_GROUP_SETUP       0x1
+#define EVENT_GROUP_DFU         0x2
+#define EVENT_GROUP_LED_STREAM  0x3
 
 
 /* Config event, setup group macros */

@@ -31,9 +31,12 @@ struct led_effect_step {
 };
 
 struct led_effect {
-	const struct led_effect_step *steps;
+	struct led_effect_step *steps;
 	u16_t step_count;
 	bool loop_forever;
+	bool stream;
+    u16_t actual_step;
+    u16_t next_free_step;
 };
 
 
@@ -55,9 +58,19 @@ struct led_effect {
 	#error "Unsupported color count"
 #endif
 
+#define LED_EFFECT_LED_LOOP()   \
+    {									\
+		.steps = ((struct led_effect_step[LED_STREEM_LOOP_SIZE]) {   \
+		}),								\
+		.step_count = 0,						\
+		.loop_forever = false,						\
+		.stream = true,                   \
+		.next_free_step = 0, \
+	}
+
 #define LED_EFFECT_LED_ON(_color)						\
 	{									\
-		.steps = ((const struct led_effect_step[]) {			\
+		.steps = (( struct led_effect_step[]) {			\
 			{							\
 				.color = _color,				\
 				.substep_count = 1,				\
@@ -72,7 +85,7 @@ struct led_effect {
 
 #define LED_EFFECT_LED_BLINK(_period, _color)					\
 	{									\
-		.steps = ((const struct led_effect_step[]) {			\
+		.steps = (( struct led_effect_step[]) {			\
 			{							\
 				.color = _color,				\
 				.substep_count = 1,				\
@@ -91,7 +104,7 @@ struct led_effect {
 #define _BREATH_SUBSTEPS 15
 #define LED_EFFECT_LED_BREATH(_period, _color)					\
 	{									\
-		.steps = ((const struct led_effect_step[]) {			\
+		.steps = (( struct led_effect_step[]) {			\
 			{							\
 				.color = _color,				\
 				.substep_count = _BREATH_SUBSTEPS,		\
@@ -137,7 +150,7 @@ struct led_effect {
  */
 #define LED_EFFECT_LED_CLOCK(_ticks, _color)					\
 	{									\
-		.steps = ((const struct led_effect_step[]) {			\
+		.steps = (( struct led_effect_step[]) {			\
 			{							\
 				.color = LED_NOCOLOR(),				\
 				.substep_count = 1,				\
