@@ -7,7 +7,8 @@ import argparse
 import logging
 
 from configurator_core import DEVICE
-from configurator_core import get_device_pid, open_device, fwinfo, fwreboot, change_config, fetch_config, dfu_transfer
+from configurator_core import get_device_pid, open_device, fwinfo, fwreboot, change_config, fetch_config, dfu_transfer, \
+    send_continuous_led_stream
 
 
 def progress_bar(permil):
@@ -76,6 +77,15 @@ def perform_fwreboot(dev, args):
         print('FW reboot request failed')
 
 
+def perform_stream(dev, args):
+    recipient = get_device_pid(args.device_type)
+
+    print('Streaming started')
+    send_continuous_led_stream(dev, recipient)
+
+    print('Streaming ended')
+
+
 def parse_arguments():
     parser = argparse.ArgumentParser()
     sp_devices = parser.add_subparsers(dest='device_type')
@@ -92,6 +102,9 @@ def parse_arguments():
 
         sp_commands.add_parser('fwinfo', help='Obtain information about FW image')
         sp_commands.add_parser('fwreboot', help='Request FW reboot')
+
+        if DEVICE[device_name]['stream']:
+            sp_commands.add_parser('stream', help='Send continuous led effects stream')
 
         device_config = DEVICE[device_name]['config']
 
@@ -139,6 +152,8 @@ def configurator():
         perform_fwreboot(dev, args)
     elif args.command == 'config':
         perform_config(dev, args)
+    elif args.command == 'stream':
+        perform_stream(dev, args)
 
 
 if __name__ == '__main__':
