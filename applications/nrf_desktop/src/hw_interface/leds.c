@@ -6,11 +6,11 @@
 
 #include <zephyr.h>
 #include <assert.h>
-#include <misc/util.h>
 #include <pwm.h>
 
 #include "power_event.h"
 #include "led_event.h"
+#include "led_ready_event.h"
 
 #include "leds_def.h"
 
@@ -20,21 +20,23 @@
 #include <logging/log.h>
 LOG_MODULE_REGISTER(MODULE, CONFIG_DESKTOP_LED_LOG_LEVEL);
 
-
 struct led {
 	struct device *pwm_dev;
 
 	size_t id;
 	struct led_color color;
 	const struct led_effect *effect;
+	const struct led_effect *next_effect;
+	bool stream;
 	u16_t effect_step;
 	u16_t effect_substep;
 
 	struct k_delayed_work work;
 };
 
+static const struct led_effect *leds_state_bck[CONFIG_DESKTOP_LED_COUNT];
 static struct led leds[CONFIG_DESKTOP_LED_COUNT];
-
+static bool streaming;
 
 static void pwm_out(struct led *led, struct led_color *color)
 {
@@ -50,6 +52,55 @@ static void pwm_off(struct led *led)
 	struct led_color nocolor = {0};
 
 	pwm_out(led, &nocolor);
+}
+
+static void ask_for_next_step(void)
+{
+	LOG_INF("Asking for new step");
+	struct led_ready_event *ready_event = new_led_ready_event();
+
+	EVENT_SUBMIT(ready_event);
+}
+
+static void restore_led_state_effect(struct led *led)
+{
+	LOG_INF("Restore previous led state effect");
+	led->effect = leds_state_bck[led->id];
+}
+
+static void handle_led_stream(struct led *led)
+{
+	if (!led->next_effect) {
+		LOG_INF("Streaming end");
+		streaming = false;
+		led->stream = false;
+
+		restore_led_state_effect(led);
+	} else {
+		led->effect = led->next_effect;
+		led->next_effect = NULL;
+
+		ask_for_next_step();
+	}
+	led->effect_step = 0;
+}
+
+static void handle_first_stream_event(struct led *led)
+{
+	LOG_INF("First stream event - inserting additional effect");
+
+	streaming = true;
+	led->effect = led->next_effect;
+}
+
+static void handle_incoming_effect(const struct led_event *event)
+{
+	LOG_INF("Handle incoming effect");
+	if (leds[event->led_id].next_effect != NULL) {
+		LOG_WRN("Effect in use, override effect");
+	}
+	LOG_INF("Inserting incoming effect to next_effect");
+	leds[event->led_id].next_effect = event->led_effect;
 }
 
 static void work_handler(struct k_work *work)
@@ -75,6 +126,9 @@ static void work_handler(struct k_work *work)
 		if (led->effect_step == led->effect->step_count) {
 			if (led->effect->loop_forever) {
 				led->effect_step = 0;
+			}
+			if (led->stream) {
+				handle_led_stream(led);
 			}
 		} else {
 			__ASSERT_NO_MSG(led->effect->steps[led->effect_step].substep_count > 0);
@@ -193,7 +247,25 @@ static bool event_handler(const struct event_header *eh)
 
 		__ASSERT_NO_MSG(event->led_id < CONFIG_DESKTOP_LED_COUNT);
 
+		if (streaming && !event->stream) {
+			leds_state_bck[event->led_id] = event->led_effect;
+			return true;
+		}
+
 		struct led *led = &leds[event->led_id];
+
+		led->stream = event->stream;
+
+		if (led->stream) {
+			LOG_INF("Stream event");
+			handle_incoming_effect(event);
+			if (streaming) {
+				LOG_INF("Next step");
+				return true;
+			}
+			leds_state_bck[event->led_id] = led->effect;
+			handle_first_stream_event(led);
+		}
 
 		led->effect = event->led_effect;
 

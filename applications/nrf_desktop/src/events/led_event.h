@@ -28,6 +28,7 @@ struct led_event {
 
 	size_t led_id;
 	const struct led_effect *led_effect;
+	bool stream;
 };
 
 EVENT_TYPE_DECLARE(led_event);

@@ -63,6 +63,8 @@ static void load_peer_state_led(void)
 
 	event->led_id = led_map[LED_ID_PEER_STATE];
 	event->led_effect = &led_peer_state_effect[peer_id][state];
+	event->stream = false;
+
 	EVENT_SUBMIT(event);
 }
 
@@ -76,6 +78,8 @@ static void load_system_state_led(void)
 
 	event->led_id = led_map[LED_ID_SYSTEM_STATE];
 	event->led_effect = &led_system_state_effect[system_state];
+	event->stream = false;
+
 	EVENT_SUBMIT(event);
 }
 
