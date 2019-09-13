@@ -12,6 +12,7 @@
 
 #include "led_event.h"
 #include "config_event.h"
+#include "ble_event.h"
 
 #include <logging/log.h>
 LOG_MODULE_REGISTER(MODULE, CONFIG_DESKTOP_LED_STREAM_LOG_LEVEL);
@@ -20,6 +21,15 @@ LOG_MODULE_REGISTER(MODULE, CONFIG_DESKTOP_LED_STREAM_LOG_LEVEL);
 #define STREAM_DATA_SIZE 8
 #define FETCH_CONFIG_SIZE 2
 #define LED_ID_POS 7
+
+
+#if defined(CONFIG_BT_PERIPHERAL)
+#define DEFAULT_LATENCY CONFIG_BT_PERIPHERAL_PREF_SLAVE_LATENCY
+#else
+#define DEFAULT_LATENCY 0
+#endif
+
+static struct bt_conn *active_conn;
 
 struct led {
 	size_t id;
@@ -34,6 +44,40 @@ struct led {
 static struct led leds[CONFIG_DESKTOP_LED_COUNT];
 static bool initialized;
 
+
+static void set_ble_latency(bool low_latency)
+{
+	if (!active_conn) {
+		LOG_INF("No active_connection");
+		return;
+	}
+
+	struct bt_conn_info info;
+
+	int err = bt_conn_get_info(active_conn, &info);
+	if (err) {
+		LOG_WRN("Cannot get conn info (%d)", err);
+		return;
+	}
+
+	if (IS_ENABLED(CONFIG_BT_PERIPHERAL) &&
+	    (info.role == BT_CONN_ROLE_SLAVE)) {
+		const struct bt_le_conn_param param = {
+			.interval_min = info.le.interval,
+			.interval_max = info.le.interval,
+			.latency = (low_latency) ? (0) : (DEFAULT_LATENCY),
+			.timeout = info.le.timeout
+		};
+
+		err = bt_conn_le_param_update(active_conn, &param);
+		if (err) {
+			LOG_WRN("Cannot update parameters (%d)", err);
+			return;
+		}
+	}
+
+	LOG_INF("BLE latency %screased", low_latency ? "de" : "in");
+}
 
 static size_t next_index(size_t index)
 {
@@ -110,6 +154,15 @@ static bool store_data(const struct event_dyndata *data, struct led *led)
 	return true;
 }
 
+static bool leds_streaming(void)
+{
+	bool streaming = false;
+	for (size_t i = 0; i < CONFIG_DESKTOP_LED_COUNT; i++) {
+		streaming |= leds[i].streaming;
+	}
+	return streaming;
+}
+
 static void send_data_from_queue(struct led *led)
 {
 	size_t free_places = count_free_places(led);
@@ -125,6 +178,11 @@ static void send_data_from_queue(struct led *led)
 		led->tx_idx = next_index(led->tx_idx);
 	} else {
 		LOG_INF("No steps ready in queue, sending previous state effect");
+
+		if (!leds_streaming()){
+
+			set_ble_latency(false);
+		}
 
 		led->streaming = false;
 
@@ -172,6 +230,7 @@ static void handle_config_event(const struct config_event *event)
 	switch (TYPE_FIELD_GET(event->id)) {
 	case STREAM_DATA:
 		handle_incoming_step(event);
+		set_ble_latency(true);
 		break;
 
 	default:
@@ -264,6 +323,31 @@ static bool event_handler(const struct event_header *eh)
 		return true;
 	}
 
+	if (is_ble_peer_event(eh)) {
+		struct ble_peer_event *event = cast_ble_peer_event(eh);
+
+		switch (event->state) {
+		case PEER_STATE_CONNECTED:
+			active_conn = event->id;
+			break;
+
+		case PEER_STATE_DISCONNECTED:
+			active_conn = NULL;
+			break;
+
+		case PEER_STATE_SECURED:
+		case PEER_STATE_CONN_FAILED:
+			/* No action */
+			break;
+
+		default:
+			__ASSERT_NO_MSG(false);
+			break;
+		}
+
+		return false;
+	}
+
 	if (is_module_state_event(eh)) {
 		const struct module_state_event *event =
 			cast_module_state_event(eh);
@@ -288,3 +372,4 @@ EVENT_SUBSCRIBE(MODULE, led_ready_event);
 EVENT_SUBSCRIBE(MODULE, module_state_event);
 EVENT_SUBSCRIBE(MODULE, config_event);
 EVENT_SUBSCRIBE(MODULE, config_fetch_request_event);
+EVENT_SUBSCRIBE(MODULE, ble_peer_event);
