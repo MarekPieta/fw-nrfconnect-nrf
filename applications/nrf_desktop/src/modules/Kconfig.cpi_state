@@ -1,0 +1,45 @@
+#
+# Copyright (c) 2019 Nordic Semiconductor
+#
+# SPDX-License-Identifier: LicenseRef-BSD-5-Clause-Nordic
+#
+
+menu "CPI State"
+
+config DESKTOP_CPI_STATE_ENABLE
+	bool "Enable changing sensor CPI with buttons"
+	depends on !DESKTOP_MOTION_NONE
+	depends on !DESKTOP_BUTTONS_NONE
+
+if DESKTOP_CPI_STATE_ENABLE
+
+config DESKTOP_CPI_STATE_TOGGLE_UP_BUTTON_ID
+	hex "ID of button that toggles CPI upwards"
+	default 0x0000
+
+config DESKTOP_CPI_STATE_TOGGLE_DOWN_BUTTON_ID
+	hex "ID of button that toggles CPI downwards"
+	default 0x0000
+
+config DESKTOP_CPI_STATE_NUMBER_OF_STEPS
+	int "Number of CPI steps"
+	default 5
+	range 1 100
+
+config DESKTOP_CPI_STATE_LOW_VALUE
+	int "Lowest CPI value in CPI state"
+	default 100
+	range 100 5000
+
+config DESKTOP_CPI_STATE_HIGH_VALUE
+	int "Highest CPI value in CPI state"
+	default 5000
+	range 100 5000
+
+module = DESKTOP_CPI_STATE
+module-str = CPI state
+source "subsys/logging/Kconfig.template.log_config"
+
+endif
+
+endmenu
