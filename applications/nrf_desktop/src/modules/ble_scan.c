@@ -203,9 +203,10 @@ static int configure_name_filters(u8_t *filter_mode)
 	u8_t peers_mask = 0;
 	int err = 0;
 
-	for (size_t i = 0; i < ARRAY_SIZE(subscribed_peers); i++) {
-		peers_mask |= BIT(subscribed_peers[i].peer_type);
-	}
+/* Let more than one peer of given type to connect. */
+//	for (size_t i = 0; i < ARRAY_SIZE(subscribed_peers); i++) {
+//		peers_mask |= BIT(subscribed_peers[i].peer_type);
+//	}
 
 	/* Bluetooth scan filters are defined in separate header. */
 	for (size_t i = 0; i < ARRAY_SIZE(peer_name); i++) {
