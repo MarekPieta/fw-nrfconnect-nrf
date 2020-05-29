@@ -350,7 +350,8 @@ static void bt_ready(int err)
 	}
 
 	LOG_INF("Bluetooth initialized");
-
+/* Do not enable the LLPM. */
+/*
 #ifdef CONFIG_BT_LL_NRFXLIB
 	hci_vs_cmd_llpm_mode_set_t *p_cmd_enable;
 
@@ -366,7 +367,8 @@ static void bt_ready(int err)
 	} else {
 		LOG_INF("LLPM enabled");
 	}
-#endif /* CONFIG_BT_LL_NRFXLIB */
+#endif
+*/
 
 	module_set_state(MODULE_STATE_READY);
 }

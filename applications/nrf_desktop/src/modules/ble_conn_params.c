@@ -54,7 +54,7 @@ static int set_conn_params(struct bt_conn *conn, u16_t conn_latency,
 			   bool peer_llpm_support)
 {
 	int err;
-
+/*
 #ifdef CONFIG_BT_LL_NRFXLIB
 	if (peer_llpm_support) {
 		struct net_buf *buf;
@@ -83,7 +83,8 @@ static int set_conn_params(struct bt_conn *conn, u16_t conn_latency,
 		err = bt_hci_cmd_send_sync(HCI_VS_OPCODE_CMD_CONN_UPDATE, buf,
 					   NULL);
 	} else
-#endif /* CONFIG_BT_LL_NRFXLIB */
+#endif
+*/
 	{
 		struct bt_le_conn_param param = {
 			.interval_min = CONN_INTERVAL_BLE_REG,
@@ -225,8 +226,8 @@ static void peer_discovered(struct bt_conn *conn, bool peer_llpm_support)
 	struct connected_peer *peer = find_connected_peer(conn);
 
 	if (peer) {
-		peer->llpm_support = peer_llpm_support;
 		peer->discovered = true;
+		peer->llpm_support = false;
 		update_peer_conn_params(peer);
 	}
 }
