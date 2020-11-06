@@ -11,7 +11,7 @@
 extern "C" {
 #endif
 
-#define REPORT_SIZE_VOICE		                16 /* bytes */
+#define REPORT_SIZE_VOICE		                20 /* bytes */
 #define VOICE_REPORT_COUNT_MAX				REPORT_SIZE_VOICE
 
 
