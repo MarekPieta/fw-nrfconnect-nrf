@@ -2,6 +2,7 @@
 
 nRF Desktop
 ###########
+Test test
 
 .. contents::
    :local:
