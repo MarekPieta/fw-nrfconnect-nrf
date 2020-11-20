@@ -1,0 +1,57 @@
+#
+# Copyright (c) 2020 Nordic Semiconductor ASA
+#
+# SPDX-License-Identifier: LicenseRef-BSD-5-Clause-Nordic
+#
+
+menuconfig EDGE_IMPULSE
+	bool "Enable Edge Impulse"
+	depends on CPLUSPLUS
+	depends on STD_CPP11
+	depends on LIB_CPLUSPLUS
+	depends on NEWLIB_LIBC
+	depends on NEWLIB_LIBC_FLOAT_PRINTF
+	depends on FPU
+	help
+	  Enable Edge Impulse library.
+
+if EDGE_IMPULSE
+
+choice
+	prompt "Select Edge Impulse library source"
+	default EDGE_IMPULSE_BUILD_FROM_ZIP
+
+config EDGE_IMPULSE_BUILD_FROM_ZIP
+	bool "Build Edge Impulse library from provided zip file"
+	help
+	  Make sure to specify the zip path as EDGE_IMPULSE_ZIP_PATH Kconfig
+	  option.
+
+config EDGE_IMPULSE_BUILD_FROM_URI
+	bool "Download Edge Impulse library from URI and build it"
+	help
+	  Make sure to specify the URI as EDGE_IMPULSE_DOWNLOAD_URI Kconfig
+	  option and provide API key header as EI_API_KEY_HEADER variable
+	  during build (if required by the HTTP server).
+
+endchoice
+
+config EDGE_IMPULSE_ZIP_PATH
+	string "Edge Impulse library zip path"
+	depends on EDGE_IMPULSE_BUILD_FROM_ZIP
+	default ''
+	help
+	  Specify path for *.zip file containing the Edge Impulse library.
+	  Path is relative to application source directory.
+
+config EDGE_IMPULSE_DOWNLOAD_URI
+	string "Edge Impulse library download URI"
+	depends on EDGE_IMPULSE_BUILD_FROM_URI
+	default ''
+	help
+	  Specify URI used to download archive with Edge Impulse library.
+	  The library will be downloaded into build directory. Make sure
+	  to specify the HTTP API key header as EI_API_KEY_HEADER variable
+	  during build if the HTTP server uses it.
+
+endif # EDGE_IMPULSE
