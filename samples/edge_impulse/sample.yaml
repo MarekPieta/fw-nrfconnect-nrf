@@ -1,0 +1,9 @@
+sample:
+  name: Edge Impulse sample
+  description: A sample demonstrating Edge Impulse integration to NCS
+tests:
+  samples.edge_impulse:
+    build_only: true
+    build_on_all: true
+    platform_allow: nrf52840dk_nrf52840 nrf52dk_nrf52832
+    tags: ci_build
