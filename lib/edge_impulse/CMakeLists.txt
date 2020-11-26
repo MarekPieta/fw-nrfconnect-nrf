@@ -146,3 +146,6 @@ endif()
 
 # Add includes to let application use the library
 zephyr_include_directories(${EI_SDK_INCLUDES})
+
+# Add runner code (include is added automatically)
+zephyr_library_sources(ei_ncs.cpp)
