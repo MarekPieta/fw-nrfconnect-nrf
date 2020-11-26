@@ -1,0 +1,3 @@
+zephyr_library_named(ei_ncs)
+zephyr_library_sources(ei_ncs.cpp)
+zephyr_library_link_libraries(edge_impulse)

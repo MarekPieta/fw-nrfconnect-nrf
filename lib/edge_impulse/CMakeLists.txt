@@ -92,3 +92,7 @@ add_dependencies(edge_impulse
                  edge_impulse_project
                  edge_impulse_project_download
 )
+
+if(CONFIG_EI_NCS)
+  include(${CMAKE_CURRENT_LIST_DIR}/ei_ncs.cmake)
+endif()
