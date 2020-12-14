@@ -132,29 +132,6 @@ static int leds_init(void)
  
 }	
 
-void draw_timer_handler(struct k_timer *dummy)
-{
-	
-	circle_test_get(circle_data);
-
-	//LOG_INF("s_idx = %i",s_idx);
-
-	is_motion_active = true;
-
-   	if (state == STATE_CONNECTED) {	
-		
-		send_motion();
-		state = STATE_PENDING;
-		//gpio_pin_set(led_port, 30, 0);
-	}
-	//void)gpio_pin_set(led_port,31, 0);
-	
-	is_motion_active = false;
-}
-
-K_TIMER_DEFINE(draw_timer, draw_timer_handler, NULL);
-
-
 static bool handle_button_event(const struct button_event *event)
 {
 	enum dir dir = key_to_dir(event->key_id);
@@ -168,9 +145,10 @@ static bool handle_button_event(const struct button_event *event)
 	
 	if(dir == DIR_START)
 	{
-		
-		/* Start spp timer , repeated per 1ms*/
-		k_timer_start(&draw_timer,K_MSEC(1), K_MSEC(1));
+		is_motion_active = true;
+		if (state == STATE_CONNECTED) {
+			send_motion();
+		}
 		/* Lit LED3 */
 		if(led_port != NULL) {
 			(void)gpio_pin_set(led_port,  DT_GPIO_PIN(DT_ALIAS(led2), gpios), LED_ON); 
@@ -180,8 +158,6 @@ static bool handle_button_event(const struct button_event *event)
 			
 	else if(dir == DIR_STOP)
 	{
-		/* Stop app timer */
-		k_timer_stop(&draw_timer);
 		is_motion_active = false;
 		/* Off LED3 */
 			if(led_port != NULL) {
@@ -209,13 +185,9 @@ static bool handle_module_state_event(const struct module_state_event *event)
 static bool handle_hid_report_sent_event(const struct hid_report_sent_event *event)
 {
 	if (event->report_id == REPORT_ID_MOUSE) {
-		if (state == STATE_PENDING) {
-			if (is_motion_active) {
-				send_motion();
-			} else {
-				state = STATE_CONNECTED;
-				//gpio_pin_set(led_port, 30, 1);
-			}
+		if (is_motion_active && (state == STATE_CONNECTED)) {
+			circle_test_get(circle_data);
+			send_motion();
 		}
 	}
 
@@ -239,13 +211,9 @@ static bool handle_hid_report_subscription_event(const struct hid_report_subscri
 
 		if ((state == STATE_IDLE) && is_connected) {
 			if (is_motion_active) {
-				send_motion();
-				state = STATE_PENDING;
-				//gpio_pin_set(led_port, 30, 0);
-			} else {
-				state = STATE_CONNECTED;
-				//gpio_pin_set(led_port, 30, 1);
+				send_motion();			
 			}
+			state = STATE_CONNECTED;
 			return false;
 		}
 	

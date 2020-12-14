@@ -939,7 +939,8 @@ static void report_send(struct report_data *rd, bool check_state, bool send_alwa
 
 		if ((rs->subscriber->is_usb) ||
 		    (rs->report_id == REPORT_ID_CONSUMER_CTRL) ||
-		    (rs->report_id == REPORT_ID_SYSTEM_CTRL))  {
+		    (rs->report_id == REPORT_ID_SYSTEM_CTRL) ||
+		    (rs->report_id == REPORT_ID_VOICE))  {
 			pipeline_depth = 1;
 		} else {
 			pipeline_depth = 2;
