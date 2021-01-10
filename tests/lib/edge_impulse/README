@@ -6,3 +6,7 @@ Expected input and output values depend on prediction index to make sure that th
 Input and output for given prediction index are defined in ei_test_params.h file.
 Input data must be ascending sequence of floats.
 Difference between subsequent elements of input sequence equals 1.
+
+Zip file containing dummy Edge Impulse library is automatically generated from sources located in "src/edge_impulse_zip" directory.
+The zip file is generated as "src/edge_impulse_dummy.zip".
+This is done to ensure that zip content will be consistent with library source files.

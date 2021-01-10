@@ -6,7 +6,17 @@
 
 cmake_minimum_required(VERSION 3.13.1)
 
+file(REMOVE ${CMAKE_CURRENT_SOURCE_DIR}/src/edge_impulse_dummy.zip)
+add_custom_target(create_zip COMMAND
+    ${CMAKE_COMMAND} -E tar "cf"
+    "../edge_impulse_dummy.zip" --format=zip
+    "./"
+    WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}/src/edge_impulse_zip/")
+
 find_package(Zephyr REQUIRED HINTS $ENV{ZEPHYR_BASE})
+
+# Ensure that zip will be packed before Edge Impulse archive is unzipped.
+add_dependencies(edge_impulse_project_download create_zip)
 
 project("Edge Impulse test")
 
