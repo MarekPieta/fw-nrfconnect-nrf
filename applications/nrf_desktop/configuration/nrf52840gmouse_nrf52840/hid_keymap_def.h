@@ -25,8 +25,8 @@ static const struct hid_keymap hid_keymap[] = {
 	{ KEY_ID(0, 0), 0x01, REPORT_ID_MOUSE }, /* Left Mouse Button */
 	{ KEY_ID(0, 1), 0x02, REPORT_ID_MOUSE }, /* Right Mouse Button */
 	{ KEY_ID(0, 2), 0x03, REPORT_ID_MOUSE }, /* Middle Mouse Button */
-	{ KEY_ID(0, 3), 0x04, REPORT_ID_MOUSE }, /* Additional Mouse Button */
-	{ KEY_ID(0, 4), 0x05, REPORT_ID_MOUSE }, /* Additional Mouse Button */
+	{ KEY_ID(0, 3), 0x0004, REPORT_ID_KEYBOARD_KEYS }, /* Letter A */
+	{ KEY_ID(0, 4), 0x0016, REPORT_ID_KEYBOARD_KEYS }, /* Letter S */
 	{ KEY_ID(0, 5), 0x06, REPORT_ID_MOUSE }, /* Additional Mouse Button */
 	{ KEY_ID(0, 6), 0x07, REPORT_ID_MOUSE }, /* Additional Mouse Button */
 };
