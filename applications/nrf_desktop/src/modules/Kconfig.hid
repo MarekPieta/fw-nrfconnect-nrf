@@ -15,6 +15,7 @@ config DESKTOP_HID_REPORT_DESC
 config DESKTOP_HID_MOUSE
 	bool "Device is a HID mouse"
 	select DESKTOP_HID_REPORT_MOUSE_SUPPORT
+	select DESKTOP_HID_REPORT_KEYBOARD_SUPPORT
 	help
 	  Enable reports needed by a mouse.
 
