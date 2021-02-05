@@ -13,7 +13,7 @@
 
 #include "sensor_sim.h"
 
-#if defined(CONFIG_SENSOR_SIM_DYNAMIC_VALUES)
+#if defined(CONFIG_SENSOR_SIM_ACCEL_SINE)
 	#include <math.h>
 #endif
 
@@ -81,6 +81,9 @@ static void sensor_sim_thread(int dev_ptr)
 			k_sleep(K_MSEC(CONFIG_SENSOR_SIM_TRIGGER_TIMER_MSEC));
 		} else if (IS_ENABLED(CONFIG_SENSOR_SIM_TRIGGER_USE_BUTTON)) {
 			k_sem_take(&drv_data->gpio_sem, K_FOREVER);
+		} else {
+			/* Should not happen. */
+			__ASSERT_NO_MSG(false);
 		}
 
 		if (drv_data->drdy_handler != NULL) {
@@ -227,7 +230,7 @@ static int generate_accel_data(enum sensor_channel chan)
 	double max_variation = 20.0;
 	static int static_val_coeff = 1.0;
 
-	if (IS_ENABLED(CONFIG_SENSOR_SIM_DYNAMIC_VALUES)) {
+	if (IS_ENABLED(CONFIG_SENSOR_SIM_ACCEL_SINE)) {
 		switch (chan) {
 		case SENSOR_CHAN_ACCEL_X:
 			accel_samples[0] = generate_sine(base_accel_samples[0],
@@ -254,9 +257,7 @@ static int generate_accel_data(enum sensor_channel chan)
 		default:
 			retval = -ENOTSUP;
 		}
-	}
-
-	if (IS_ENABLED(CONFIG_SENSOR_SIM_STATIC_VALUES)) {
+	} else if (IS_ENABLED(CONFIG_SENSOR_SIM_ACCEL_STATIC)) {
 		switch (chan) {
 		case SENSOR_CHAN_ACCEL_X:
 			accel_samples[0] = static_val_coeff * max_variation;
@@ -277,6 +278,9 @@ static int generate_accel_data(enum sensor_channel chan)
 		}
 
 		static_val_coeff *= -1.0;
+	} else {
+		/* Should not happen. */
+		__ASSERT_NO_MSG(false);
 	}
 
 	return retval;
@@ -315,17 +319,12 @@ static int sensor_sim_generate_data(enum sensor_channel chan)
 {
 	switch (chan) {
 	case SENSOR_CHAN_ACCEL_X:
-		generate_accel_data(SENSOR_CHAN_ACCEL_X);
-		break;
 	case SENSOR_CHAN_ACCEL_Y:
-		generate_accel_data(SENSOR_CHAN_ACCEL_Y);
-		break;
 	case SENSOR_CHAN_ACCEL_Z:
-		generate_accel_data(SENSOR_CHAN_ACCEL_Z);
-		break;
 	case SENSOR_CHAN_ACCEL_XYZ:
-		generate_accel_data(SENSOR_CHAN_ACCEL_XYZ);
+		generate_accel_data(chan);
 		break;
+
 	case SENSOR_CHAN_AMBIENT_TEMP:
 		generate_temp_data();
 		break;
