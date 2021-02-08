@@ -6,26 +6,105 @@
 
 #include <drivers/gpio.h>
 #include <init.h>
-#include <drivers/sensor.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <logging/log.h>
 
-#include "sensor_sim.h"
+#include "sensor_sim_priv.h"
+#include <drivers/sensor_sim.h>
 
-#include <math.h>
-#ifndef M_PI
-  #define M_PI 3.14159265358979323846
-#endif
+#define ACCEL_CHAN_COUNT	3
 
 LOG_MODULE_REGISTER(sensor_sim, CONFIG_SENSOR_SIM_LOG_LEVEL);
 
-static const double base_accel_samples[3] = {0.0, 0.0, 0.0};
-static double accel_samples[3];
+#define ACCEL_DEFAULT_TYPE		WAVE_GEN_TYPE_SINE
+#define ACCEL_DEFAULT_AMPLITUDE		20.0
+#define ACCEL_DEFAULT_PERIOD_MS		10000
+
+static struct wave_gen_param accel_param[ACCEL_CHAN_COUNT];
+struct k_mutex accel_param_mutex;
+
+static double accel_samples[ACCEL_CHAN_COUNT];
 
 static double temp_sample;
 static double humidity_sample;
 static double pressure_sample;
+
+/**
+ * @typedef generator_function
+ * @brief Function used to generate sensor value for given channel.
+ *
+ * @param chan[in]	Selected sensor channel.
+ * @param out_val[out]	Pointer to the variable that is used to store result.
+ *
+ * @retval 0 If the operation was successful.
+ *           Otherwise, a (negative) error code is returned.
+ */
+typedef int (*generator_function)(enum sensor_channel chan, double *out_val);
+
+/*
+ * @brief Function used to get wave parameters for given sensor channel.
+ *
+ * @param chan[in]	Selected sensor channel.
+ *
+ * @return Pointer to the structure describing parameters of generated wave.
+ */
+static struct wave_gen_param *get_wave_params(enum sensor_channel chan)
+{
+	struct wave_gen_param *dest = NULL;
+
+	switch (chan) {
+	case SENSOR_CHAN_ACCEL_X:
+	case SENSOR_CHAN_ACCEL_XYZ:
+		dest = &accel_param[0];
+		break;
+	case SENSOR_CHAN_ACCEL_Y:
+		dest = &accel_param[1];
+		break;
+	case SENSOR_CHAN_ACCEL_Z:
+		dest = &accel_param[2];
+		break;
+	default:
+		break;
+	}
+
+	return dest;
+}
+
+int sensor_sim_set_wave_param(enum sensor_channel chan, const struct wave_gen_param *set_params)
+{
+	if (!IS_ENABLED(CONFIG_SENSOR_SIM_ACCEL_WAVE)) {
+		return -ENOTSUP;
+	}
+
+	struct wave_gen_param *dest = get_wave_params(chan);
+
+	if (!dest) {
+		return -ENOTSUP;
+	}
+
+	if ((set_params->period_ms == 0) || (set_params->type >= WAVE_GEN_TYPE_COUNT)) {
+		return -EINVAL;
+	}
+
+	int err = k_mutex_lock(&accel_param_mutex, K_FOREVER);
+
+	__ASSERT_NO_MSG(!err);
+
+	memcpy(dest, set_params, sizeof(struct wave_gen_param));
+
+	if (chan == SENSOR_CHAN_ACCEL_XYZ) {
+		memcpy(get_wave_params(SENSOR_CHAN_ACCEL_Y), set_params,
+		       sizeof(struct wave_gen_param));
+		memcpy(get_wave_params(SENSOR_CHAN_ACCEL_Z), set_params,
+		       sizeof(struct wave_gen_param));
+	}
+
+	err = k_mutex_unlock(&accel_param_mutex);
+	__ASSERT_NO_MSG(!err);
+
+	return err;
+}
 
 /*
  * @brief Helper function to convert from double to sensor_value struct
@@ -190,8 +269,19 @@ static int sensor_sim_init(const struct device *dev)
 	}
 #endif
 	srand(k_cycle_get_32());
+	int err = k_mutex_init(&accel_param_mutex);
 
-	return 0;
+	__ASSERT_NO_MSG(!err);
+
+	if (IS_ENABLED(CONFIG_SENSOR_SIM_ACCEL_WAVE)) {
+		for (size_t i = 0; i < ARRAY_SIZE(accel_param); i++) {
+			accel_param[i].type = ACCEL_DEFAULT_TYPE;
+			accel_param[i].period_ms = ACCEL_DEFAULT_PERIOD_MS;
+			accel_param[i].amplitude = ACCEL_DEFAULT_AMPLITUDE;
+		}
+	}
+
+	return err;
 }
 
 /**
@@ -203,21 +293,77 @@ static double generate_pseudo_random(void)
 }
 
 /*
- * @brief Calculates sine from uptime
- * The input to the sin() function is limited to avoid overflow issues
+ * @brief Generate value for acceleration signal toggling between two values on fetch.
  *
- * @param offset Offset for the sine.
- * @param amplitude Amplitude of sine.
+ * @param chan[in]	Selected sensor channel.
+ * @param out_val[out]	Pointer to the variable that is used to store result.
+ *
+ * @retval 0 If the operation was successful.
+ *           Otherwise, a (negative) error code is returned.
  */
-static double generate_sine(double offset, double amplitude)
+static int generate_toggle(enum sensor_channel chan, double *out_val)
 {
-	/* Predefined period for generated sine function. */
-	static const uint32_t period_ms = 10000;
+	static const double amplitude = 20.0;
+	static double val_sign = 1.0;
+	double res_val = amplitude * val_sign;
 
-	double time = k_uptime_get_32() % period_ms;
-	double angle = 2 * M_PI * (time / period_ms);
+	*out_val = res_val;
 
-	return offset + amplitude * sin(angle);
+	if (chan == SENSOR_CHAN_ACCEL_XYZ) {
+		*(out_val + 1) = res_val;
+		*(out_val + 2) = res_val;
+	}
+
+	val_sign *= -1.0;
+
+	return 0;
+}
+
+/*
+ * @brief Generate value of acceleration wave signal.
+ *
+ * @param chan[in]	Selected sensor channel.
+ * @param out_val[out]	Pointer to the variable that is used to store result.
+ *
+ * @retval 0 If the operation was successful.
+ *           Otherwise, a (negative) error code is returned.
+ */
+static int generate_wave(enum sensor_channel chan, double *out_val)
+{
+	uint32_t time = k_uptime_get_32();
+	int err = k_mutex_lock(&accel_param_mutex, K_FOREVER);
+
+	__ASSERT_NO_MSG(!err);
+
+	struct wave_gen_param *params = get_wave_params(chan);
+
+	__ASSERT_NO_MSG(params);
+
+	err = wave_gen_generate_value(time, params, out_val);
+
+	if (chan == SENSOR_CHAN_ACCEL_XYZ) {
+		static const enum sensor_channel chan_rem[]  = {
+			SENSOR_CHAN_ACCEL_Y,
+			SENSOR_CHAN_ACCEL_Z
+		};
+
+		for (size_t i = 0; (i < ARRAY_SIZE(chan_rem)) && !err; i++) {
+			params = get_wave_params(chan_rem[i]);
+			__ASSERT_NO_MSG(params);
+			err = wave_gen_generate_value(time, params, out_val + i + 1);
+		}
+	}
+
+	if (err) {
+		LOG_ERR("Cannot generate wave value (err %d)", err);
+	}
+
+	int err2 = k_mutex_unlock(&accel_param_mutex);
+
+	__ASSERT_NO_MSG(!err2);
+	ARG_UNUSED(err2);
+
+	return err;
 }
 
 /*
@@ -228,60 +374,32 @@ static double generate_sine(double offset, double amplitude)
 static int generate_accel_data(enum sensor_channel chan)
 {
 	int retval = 0;
-	double max_variation = 20.0;
-	static int static_val_coeff = 1.0;
+	generator_function gen_fn = NULL;
 
-	if (IS_ENABLED(CONFIG_SENSOR_SIM_ACCEL_SINE)) {
-		switch (chan) {
-		case SENSOR_CHAN_ACCEL_X:
-			accel_samples[0] = generate_sine(base_accel_samples[0],
-								max_variation);
-			break;
-		case SENSOR_CHAN_ACCEL_Y:
-			accel_samples[1] = generate_sine(base_accel_samples[1],
-								max_variation);
-			break;
-		case SENSOR_CHAN_ACCEL_Z:
-			accel_samples[2] = generate_sine(base_accel_samples[2],
-								max_variation);
-			break;
-		case SENSOR_CHAN_ACCEL_XYZ:
-			accel_samples[0] = generate_sine(base_accel_samples[0],
-								max_variation);
-			k_sleep(K_MSEC(1));
-			accel_samples[1] = generate_sine(base_accel_samples[1],
-								max_variation);
-			k_sleep(K_MSEC(1));
-			accel_samples[2] = generate_sine(base_accel_samples[2],
-								max_variation);
-			break;
-		default:
-			retval = -ENOTSUP;
-		}
-	} else if (IS_ENABLED(CONFIG_SENSOR_SIM_ACCEL_TOGGLE)) {
-		switch (chan) {
-		case SENSOR_CHAN_ACCEL_X:
-			accel_samples[0] = static_val_coeff * max_variation;
-			break;
-		case SENSOR_CHAN_ACCEL_Y:
-			accel_samples[1] = static_val_coeff * max_variation;
-			break;
-		case SENSOR_CHAN_ACCEL_Z:
-			accel_samples[2] = static_val_coeff * max_variation;
-			break;
-		case SENSOR_CHAN_ACCEL_XYZ:
-			accel_samples[0] = static_val_coeff * max_variation;
-			accel_samples[1] = static_val_coeff * max_variation;
-			accel_samples[2] = static_val_coeff * max_variation;
-			break;
-		default:
-			retval = -ENOTSUP;
-		}
-
-		static_val_coeff *= -1.0;
+	if (IS_ENABLED(CONFIG_SENSOR_SIM_ACCEL_WAVE)) {
+		gen_fn = generate_wave;
+	} else if (IS_ENABLED(CONFIG_SENSOR_SIM_ACCEL_STATIC)) {
+		gen_fn = generate_toggle;
 	} else {
-		/* Should not happen. */
-		__ASSERT_NO_MSG(false);
+		return -ENOTSUP;
+	}
+
+	switch (chan) {
+	case SENSOR_CHAN_ACCEL_X:
+	case SENSOR_CHAN_ACCEL_XYZ:
+		/* The function must generate samples for all the
+		 * requested channels.
+		 */
+		retval = gen_fn(chan, &accel_samples[0]);
+		break;
+	case SENSOR_CHAN_ACCEL_Y:
+		retval = gen_fn(chan, &accel_samples[1]);
+		break;
+	case SENSOR_CHAN_ACCEL_Z:
+		retval = gen_fn(chan, &accel_samples[2]);
+		break;
+	default:
+		retval = -ENOTSUP;
 	}
 
 	return retval;
