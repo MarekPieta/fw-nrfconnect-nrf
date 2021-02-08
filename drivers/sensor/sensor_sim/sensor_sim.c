@@ -11,21 +11,70 @@
 #include <stdlib.h>
 #include <logging/log.h>
 
-#include "sensor_sim.h"
+#include "sensor_sim_priv.h"
+#include <drivers/sensor_sim.h>
 
 #include <math.h>
 #ifndef M_PI
   #define M_PI 3.14159265358979323846
 #endif
+#define ACCEL_CHAN_COUNT	3
 
 LOG_MODULE_REGISTER(sensor_sim, CONFIG_SENSOR_SIM_LOG_LEVEL);
 
-static const double base_accel_samples[3] = {0.0, 0.0, 0.0};
-static double accel_samples[3];
+struct wave_param {
+	enum wave_type type;
+	uint32_t period_ms;
+	double amplitude;
+	double noise;
+	struct k_mutex mutex;
+};
+
+static struct wave_param accel_params = {
+	.type = WAVE_TYPE_SINE,
+	.period_ms = 10000,
+	.amplitude = 20.0,
+};
+
+static double accel_samples[ACCEL_CHAN_COUNT];
 
 static double temp_sample;
 static double humidity_sample;
 static double pressure_sample;
+
+/**
+ * @typedef generator_function
+ * @brief Function used to generate sensor value for given channel.
+ *
+ * @param chan[in]	Selected sensor channel.
+ * @param out_val[out]	Pointer to the variable that is used to store result.
+ *
+ * @retval 0 If the operation was successful.
+ *           Otherwise, a (negative) error code is returned.
+ */
+typedef int (*generator_function)(enum sensor_channel chan, double *out_val);
+
+int sensor_sim_set_accel_params(enum wave_type type, double amplitude, uint32_t period_ms,
+				double noise)
+{
+	if (!IS_ENABLED(CONFIG_SENSOR_SIM_ACCEL_WAVE)) {
+		return -ENOTSUP;
+	}
+
+	int err = k_mutex_lock(&accel_params.mutex, K_FOREVER);
+
+	__ASSERT_NO_MSG(!err);
+
+	accel_params.type = type;
+	accel_params.amplitude = amplitude;
+	accel_params.period_ms = period_ms;
+	accel_params.noise = noise;
+
+	err = k_mutex_unlock(&accel_params.mutex);
+	__ASSERT_NO_MSG(!err);
+
+	return err;
+}
 
 /*
  * @brief Helper function to convert from double to sensor_value struct
@@ -190,6 +239,9 @@ static int sensor_sim_init(const struct device *dev)
 	}
 #endif
 	srand(k_cycle_get_32());
+	int err = k_mutex_init(&accel_params.mutex);
+
+	__ASSERT_NO_MSG(!err);
 
 	return 0;
 }
@@ -203,21 +255,163 @@ static double generate_pseudo_random(void)
 }
 
 /*
- * @brief Calculates sine from uptime
- * The input to the sin() function is limited to avoid overflow issues
+ * @brief Generate value for acceleration signal toggling between two values on fetch.
  *
- * @param offset Offset for the sine.
- * @param amplitude Amplitude of sine.
+ * @param chan[in]	Selected sensor channel.
+ * @param out_val[out]	Pointer to the variable that is used to store result.
+ *
+ * @retval 0 If the operation was successful.
+ *           Otherwise, a (negative) error code is returned.
  */
-static double generate_sine(double offset, double amplitude)
+static int generate_toggle(enum sensor_channel chan, double *out_val)
 {
-	/* Predefined period for generated sine function. */
-	static const uint32_t period_ms = 10000;
+	static const double amplitude = 20.0;
+	static double val_sign = 1.0;
 
-	double time = k_uptime_get_32() % period_ms;
-	double angle = 2 * M_PI * (time / period_ms);
+	double res_val = amplitude * val_sign;
 
-	return offset + amplitude * sin(angle);
+	*out_val = res_val;
+	if (chan == SENSOR_CHAN_ACCEL_XYZ) {
+		*(out_val + 1) = res_val;
+		*(out_val + 2) = res_val;
+	}
+
+	val_sign *= -1.0;
+
+	return 0;
+}
+
+/*
+ * @brief Calculate sine wave value.
+ *
+ * @param time[in]	Time for generated value (lower than the sine wave period).
+ * @param period[in]	Sine wave period.
+ *
+ * @return Sine wave value for given time.
+ */
+static double sine_val(uint32_t time, uint32_t period)
+{
+	static const double amplitude = 1.0;
+	double angle = 2 * M_PI * time / period;
+
+	return amplitude * sin(angle);
+}
+
+/*
+ * @brief Calculate triangle wave value.
+ *
+ * @param time[in]	Time for generated value (lower than the triangle wave period).
+ * @param period[in]	Triangle wave period.
+ *
+ * @return Triangle wave value for given time.
+ */
+static double triangle_val(uint32_t time, uint32_t period)
+{
+	static const double amplitude = 1.0;
+
+	double res;
+	uint32_t line_time = period / 2;
+	double change;
+
+	if (time < line_time) {
+		change = 2 * amplitude * time / line_time;
+		res = -amplitude + change;
+	} else {
+		time -= line_time;
+		change = 2 * amplitude * time / line_time;
+		res = amplitude - change;
+	}
+
+	return res;
+}
+
+/*
+ * @brief Calculate square wave value.
+ *
+ * @param time[in]	Time for generated value (lower than the square wave period).
+ * @param period[in]	Square wave period.
+ *
+ * @return Square wave value for given time.
+ */
+static double square_val(uint32_t time, uint32_t period)
+{
+	static const double amplitude = 1.0;
+
+	return ((time < (period / 2)) ? (-amplitude) : (amplitude));
+}
+
+/*
+ * @brief Generate value of acceleration wave signal.
+ *
+ * @param chan[in]	Selected sensor channel.
+ * @param out_val[out]	Pointer to the variable that is used to store result.
+ *
+ * @retval 0 If the operation was successful.
+ *           Otherwise, a (negative) error code is returned.
+ */
+static int generate_wave(enum sensor_channel chan, double *out_val)
+{
+	static const double base_accel_samples[ACCEL_CHAN_COUNT] = {0.0, 0.0, 0.0};
+
+	uint32_t time = k_uptime_get_32() % accel_params.period_ms;
+	double res_val = 0;
+
+	int err = k_mutex_lock(&accel_params.mutex, K_FOREVER);
+
+	__ASSERT_NO_MSG(!err);
+
+	switch (accel_params.type) {
+	case WAVE_TYPE_SINE:
+		res_val = sine_val(time, accel_params.period_ms);
+		break;
+
+	case WAVE_TYPE_TRIANGLE:
+		res_val = triangle_val(time, accel_params.period_ms);
+		break;
+
+	case WAVE_TYPE_SQUARE:
+		res_val = square_val(time, accel_params.period_ms);
+		break;
+
+	case WAVE_TYPE_NONE:
+		res_val = 0.0;
+		break;
+
+	default:
+		/* Should not happen. */
+		__ASSERT_NO_MSG(false);
+	}
+
+	res_val *= accel_params.amplitude;
+
+	err = k_mutex_unlock(&accel_params.mutex);
+	__ASSERT_NO_MSG(!err);
+
+	BUILD_ASSERT((SENSOR_CHAN_ACCEL_X + 1) == SENSOR_CHAN_ACCEL_Y);
+	BUILD_ASSERT((SENSOR_CHAN_ACCEL_Y + 1) == SENSOR_CHAN_ACCEL_Z);
+
+	switch (chan) {
+	case SENSOR_CHAN_ACCEL_X:
+	case SENSOR_CHAN_ACCEL_Y:
+	case SENSOR_CHAN_ACCEL_Z:
+		*out_val = res_val + base_accel_samples[chan - SENSOR_CHAN_ACCEL_X] +
+			   (accel_params.noise * generate_pseudo_random());
+		break;
+
+	case SENSOR_CHAN_ACCEL_XYZ:
+		for (size_t i = 0; i < ACCEL_CHAN_COUNT; i++) {
+			*(out_val + i) = res_val + base_accel_samples[i] +
+					 (accel_params.noise * generate_pseudo_random());
+
+		}
+		break;
+
+	default:
+		/* Should not happen. */
+		__ASSERT_NO_MSG(false);
+	}
+
+	return err;
 }
 
 /*
@@ -228,60 +422,33 @@ static double generate_sine(double offset, double amplitude)
 static int generate_accel_data(enum sensor_channel chan)
 {
 	int retval = 0;
-	double max_variation = 20.0;
-	static int static_val_coeff = 1.0;
+	generator_function gen_fn;
 
-	if (IS_ENABLED(CONFIG_SENSOR_SIM_ACCEL_SINE)) {
-		switch (chan) {
-		case SENSOR_CHAN_ACCEL_X:
-			accel_samples[0] = generate_sine(base_accel_samples[0],
-								max_variation);
-			break;
-		case SENSOR_CHAN_ACCEL_Y:
-			accel_samples[1] = generate_sine(base_accel_samples[1],
-								max_variation);
-			break;
-		case SENSOR_CHAN_ACCEL_Z:
-			accel_samples[2] = generate_sine(base_accel_samples[2],
-								max_variation);
-			break;
-		case SENSOR_CHAN_ACCEL_XYZ:
-			accel_samples[0] = generate_sine(base_accel_samples[0],
-								max_variation);
-			k_sleep(K_MSEC(1));
-			accel_samples[1] = generate_sine(base_accel_samples[1],
-								max_variation);
-			k_sleep(K_MSEC(1));
-			accel_samples[2] = generate_sine(base_accel_samples[2],
-								max_variation);
-			break;
-		default:
-			retval = -ENOTSUP;
-		}
-	} else if (IS_ENABLED(CONFIG_SENSOR_SIM_ACCEL_TOGGLE)) {
-		switch (chan) {
-		case SENSOR_CHAN_ACCEL_X:
-			accel_samples[0] = static_val_coeff * max_variation;
-			break;
-		case SENSOR_CHAN_ACCEL_Y:
-			accel_samples[1] = static_val_coeff * max_variation;
-			break;
-		case SENSOR_CHAN_ACCEL_Z:
-			accel_samples[2] = static_val_coeff * max_variation;
-			break;
-		case SENSOR_CHAN_ACCEL_XYZ:
-			accel_samples[0] = static_val_coeff * max_variation;
-			accel_samples[1] = static_val_coeff * max_variation;
-			accel_samples[2] = static_val_coeff * max_variation;
-			break;
-		default:
-			retval = -ENOTSUP;
-		}
-
-		static_val_coeff *= -1.0;
+	if (IS_ENABLED(CONFIG_SENSOR_SIM_ACCEL_WAVE)) {
+		gen_fn = generate_wave;
+	} else if (IS_ENABLED(CONFIG_SENSOR_SIM_ACCEL_STATIC)) {
+		gen_fn = generate_toggle;
 	} else {
 		/* Should not happen. */
 		__ASSERT_NO_MSG(false);
+	}
+
+	switch (chan) {
+	case SENSOR_CHAN_ACCEL_X:
+	case SENSOR_CHAN_ACCEL_XYZ:
+		/* The function must generate samples for all the
+		 * requested channels.
+		 */
+		retval = gen_fn(chan, &accel_samples[0]);
+		break;
+	case SENSOR_CHAN_ACCEL_Y:
+		retval = gen_fn(chan, &accel_samples[1]);
+		break;
+	case SENSOR_CHAN_ACCEL_Z:
+		retval = gen_fn(chan, &accel_samples[2]);
+		break;
+	default:
+		retval = -ENOTSUP;
 	}
 
 	return retval;

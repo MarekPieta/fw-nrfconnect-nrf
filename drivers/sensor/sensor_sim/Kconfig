@@ -25,9 +25,12 @@ choice
 	prompt "Select simulated acceleration type"
 	default SENSOR_SIM_ACCEL_TOGGLE
 
-config SENSOR_SIM_ACCEL_SINE
-	bool "Sine wave"
+config SENSOR_SIM_ACCEL_WAVE
+	bool "Periodic wave signal"
 	select REQUIRES_FULL_LIBC
+	help
+	  Wave type, amplitude and period are controlled with dedicated API.
+	  By default a sine wave is generated.
 
 config SENSOR_SIM_ACCEL_TOGGLE
 	bool "Toggle on fetch between statically defined values"
