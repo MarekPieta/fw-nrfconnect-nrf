@@ -20,12 +20,13 @@
 
 LOG_MODULE_REGISTER(sensor_sim, CONFIG_SENSOR_SIM_LOG_LEVEL);
 
-static const double base_accel_samples[3] = {0.0, 0.0, 0.0};
 static double accel_samples[3];
 
 static double temp_sample;
 static double humidity_sample;
 static double pressure_sample;
+
+typedef void (*generator_function)(enum sensor_channel chan, double *out_val);
 
 /*
  * @brief Helper function to convert from double to sensor_value struct
@@ -202,22 +203,38 @@ static double generate_pseudo_random(void)
 	return (double)rand() / ((double)RAND_MAX / 2.0) - 1.0;
 }
 
-/*
- * @brief Calculates sine from uptime
- * The input to the sin() function is limited to avoid overflow issues
- *
- * @param offset Offset for the sine.
- * @param amplitude Amplitude of sine.
- */
-static double generate_sine(double offset, double amplitude)
+static void generate_toggle(enum sensor_channel chan, double *out_val)
 {
-	/* Predefined period for generated sine function. */
+	static const double amplitude = 20.0;
+	static double val_sign = 1.0;
+
+	double res_val = amplitude * val_sign;
+
+	*out_val = res_val;
+	if (chan == SENSOR_CHAN_ACCEL_XYZ) {
+		*(out_val + 1) = res_val;
+		*(out_val + 2) = res_val;
+	}
+
+	val_sign *= -1.0;
+}
+
+static void generate_sine(enum sensor_channel chan, double *out_val)
+{
+	/* Predefined period and amplitude for generated sine function. */
 	static const uint32_t period_ms = 10000;
+	static const double amplitude = 20.0;
 
 	double time = k_uptime_get_32() % period_ms;
 	double angle = 2 * M_PI * (time / period_ms);
 
-	return offset + amplitude * sin(angle);
+	double res_val = offset + amplitude * sin(angle);
+
+	*out_val = res_val;
+	if (chan == SENSOR_CHAN_ACCEL_XYZ) {
+		*(out_val + 1) = res_val;
+		*(out_val + 2) = res_val;
+	}
 }
 
 /*
@@ -228,60 +245,33 @@ static double generate_sine(double offset, double amplitude)
 static int generate_accel_data(enum sensor_channel chan)
 {
 	int retval = 0;
-	double max_variation = 20.0;
-	static int static_val_coeff = 1.0;
+	generator_function gen_fn;
 
 	if (IS_ENABLED(CONFIG_SENSOR_SIM_ACCEL_SINE)) {
-		switch (chan) {
-		case SENSOR_CHAN_ACCEL_X:
-			accel_samples[0] = generate_sine(base_accel_samples[0],
-								max_variation);
-			break;
-		case SENSOR_CHAN_ACCEL_Y:
-			accel_samples[1] = generate_sine(base_accel_samples[1],
-								max_variation);
-			break;
-		case SENSOR_CHAN_ACCEL_Z:
-			accel_samples[2] = generate_sine(base_accel_samples[2],
-								max_variation);
-			break;
-		case SENSOR_CHAN_ACCEL_XYZ:
-			accel_samples[0] = generate_sine(base_accel_samples[0],
-								max_variation);
-			k_sleep(K_MSEC(1));
-			accel_samples[1] = generate_sine(base_accel_samples[1],
-								max_variation);
-			k_sleep(K_MSEC(1));
-			accel_samples[2] = generate_sine(base_accel_samples[2],
-								max_variation);
-			break;
-		default:
-			retval = -ENOTSUP;
-		}
-	} else if (IS_ENABLED(CONFIG_SENSOR_SIM_ACCEL_TOGGLE)) {
-		switch (chan) {
-		case SENSOR_CHAN_ACCEL_X:
-			accel_samples[0] = static_val_coeff * max_variation;
-			break;
-		case SENSOR_CHAN_ACCEL_Y:
-			accel_samples[1] = static_val_coeff * max_variation;
-			break;
-		case SENSOR_CHAN_ACCEL_Z:
-			accel_samples[2] = static_val_coeff * max_variation;
-			break;
-		case SENSOR_CHAN_ACCEL_XYZ:
-			accel_samples[0] = static_val_coeff * max_variation;
-			accel_samples[1] = static_val_coeff * max_variation;
-			accel_samples[2] = static_val_coeff * max_variation;
-			break;
-		default:
-			retval = -ENOTSUP;
-		}
-
-		static_val_coeff *= -1.0;
+		gen_fn = generate_sine;
+	} else if (IS_ENABLED(CONFIG_SENSOR_SIM_ACCEL_STATIC)) {
+		gen_fn = generate_toggle;
 	} else {
 		/* Should not happen. */
 		__ASSERT_NO_MSG(false);
+	}
+
+	switch (chan) {
+	case SENSOR_CHAN_ACCEL_X:
+	case SENSOR_CHAN_ACCEL_XYZ:
+		/* The function must generate samples for all the
+		 * requested channels.
+		 */
+		gen_fn(chan, &accel_samples[0]);
+		break;
+	case SENSOR_CHAN_ACCEL_Y:
+		gen_fn(chan, &accel_samples[1]);
+		break;
+	case SENSOR_CHAN_ACCEL_Z:
+		gen_fn(chan, &accel_samples[2]);
+		break;
+	default:
+		retval = -ENOTSUP;
 	}
 
 	return retval;
