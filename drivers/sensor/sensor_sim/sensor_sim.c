@@ -12,6 +12,7 @@
 #include <logging/log.h>
 
 #include "sensor_sim.h"
+#include "signal_gen.h"
 
 #include <math.h>
 #ifndef M_PI
@@ -237,6 +238,38 @@ static void generate_sine(enum sensor_channel chan, double *out_val)
 	}
 }
 
+static void generate_signal_gen(enum sensor_channel chan, double *out_val)
+{
+	float readout[3];
+
+	signal_gen_get_data(readout, 3);
+
+	switch (chan) {
+	case SENSOR_CHAN_ACCEL_X:
+		/* The function must generate samples for all the
+		 * requested channels.
+		 */
+		*out_val = readout[0];
+		break;
+	case SENSOR_CHAN_ACCEL_Y:
+		*out_val = readout[1];
+		break;
+	case SENSOR_CHAN_ACCEL_Z:
+		*out_val = readout[2];
+		break;
+	case SENSOR_CHAN_ACCEL_XYZ:
+		*out_val = readout[0];
+		out_val++;
+		*out_val = readout[1];
+		out_val++;
+		*out_val = readout[2];
+		break;
+	default:
+		/* Should not happen. */
+		__ASSERT_NO_MSG(false);
+	}
+}
+
 /*
  * @brief Generates accelerometer data.
  *
@@ -251,6 +284,8 @@ static int generate_accel_data(enum sensor_channel chan)
 		gen_fn = generate_sine;
 	} else if (IS_ENABLED(CONFIG_SENSOR_SIM_ACCEL_STATIC)) {
 		gen_fn = generate_toggle;
+	} else if (IS_ENABLED(CONFIG_SENSOR_SIM_ACCEL_SIGNAL_GEN)){
+		gen_fn = generate_signal_gen;
 	} else {
 		/* Should not happen. */
 		__ASSERT_NO_MSG(false);

@@ -32,6 +32,13 @@ config SENSOR_SIM_ACCEL_SINE
 config SENSOR_SIM_ACCEL_TOGGLE
 	bool "Toggle on fetch between statically defined values"
 
+config SENSOR_SIM_ACCEL_SIGNAL_GEN
+	bool "Signal generator"
+	depends on SIGNAL_GEN
+	help
+	  Use the NCS signal generator to generate acceleration readouts.
+	  Application is responsible for initialization of signal generator
+	  and starting playbacks.
 endchoice
 
 config SENSOR_SIM_BASE_TEMPERATURE
