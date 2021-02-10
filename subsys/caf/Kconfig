@@ -1,0 +1,16 @@
+#
+# Copyright (c) 2021 Nordic Semiconductor ASA
+#
+# SPDX-License-Identifier: LicenseRef-Nordic-5-Clause
+#
+
+menuconfig CAF
+	bool "Common Application Framework"
+	select EVENT_MANAGER
+	select CAF_MODULE_STATE_EVENTS
+	help
+	  Enable usage of Common Application Framework.
+
+if CAF
+rsource "events/Kconfig"
+endif # CAF
