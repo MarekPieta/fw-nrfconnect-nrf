@@ -1,0 +1,19 @@
+#
+# Copyright (c) 2021 Nordic Semiconductor
+#
+# SPDX-License-Identifier: LicenseRef-Nordic-5-Clause
+#
+
+menuconfig SIGNAL_GEN
+	bool "Enable signal generator"
+	help
+	  Enable the signal generator. This tool generates values of the user
+	  defined signals that correspond to current system uptime.
+
+if SIGNAL_GEN
+
+module = SIGNAL_GEN
+module-str = Signal generator
+source "${ZEPHYR_BASE}/subsys/logging/Kconfig.template.log_config"
+
+endif # SIGNAL_GEN
