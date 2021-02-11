@@ -11,3 +11,10 @@ Events are specified by each module and the application modules can subscribe an
 
 One of the applications that are using the CAF modules in |NCS| is :ref:`nrf_desktop`.
 For details about events and their implementation, see the :ref:`event_manager` page.
+
+.. toctree::
+   :maxdepth: 1
+   :glob:
+   :caption: Subpages:
+
+   caf/buttons
