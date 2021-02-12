@@ -1,0 +1,35 @@
+#
+# Copyright (c) 2021 Nordic Semiconductor
+#
+# SPDX-License-Identifier: LicenseRef-Nordic-5-Clause
+#
+
+menu "Edge Impulse data forwarder"
+
+config EI_APP_DATA_FORWARDER_ENABLE
+	bool "Enable data forwarder"
+	depends on UART_ASYNC_API
+
+if EI_APP_DATA_FORWARDER_ENABLE
+
+config EI_APP_DATA_FORWARDER_BUF_SIZE
+	int "Buffer size"
+	default 64
+	range 6 4096
+	help
+	  Size of the buffer used to temporarily store forwarded data.
+	  The buffer must be big enough to store a single line of forwarded data.
+
+config EI_APP_DATA_FORWARDER_UART_DEV
+	string "UART device name"
+	default "UART_0"
+	help
+	  Name of UART device that is used to forward data.
+
+module = EI_APP_DATA_FORWARDER
+module-str = EI app data forwarder
+source "subsys/logging/Kconfig.template.log_config"
+
+endif # EI_APP_DATA_FORWARDER_ENABLE
+
+endmenu
