@@ -1,0 +1,9 @@
+sample:
+  name: Edge Impulse
+  description: Edge Impulse application reference design
+tests:
+  applications.edge_impulse.zdebug:
+    build_only: true
+    build_on_all: true
+    platform_allow: nrf52840dk_nrf52840
+    tags: ci_build
