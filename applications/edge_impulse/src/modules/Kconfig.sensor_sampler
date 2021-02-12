@@ -1,0 +1,21 @@
+#
+# Copyright (c) 2021 Nordic Semiconductor
+#
+# SPDX-License-Identifier: LicenseRef-Nordic-5-Clause
+#
+
+menu "Sensor sampler"
+
+config EI_APP_SENSOR_SAMPLER_ENABLE
+	bool "Enable sensor sampler"
+	depends on SENSOR
+
+if EI_APP_SENSOR_SAMPLER_ENABLE
+
+module = EI_APP_SENSOR_SAMPLER
+module-str = EI app sensor sampler
+source "subsys/logging/Kconfig.template.log_config"
+
+endif # EI_APP_SENSOR_SAMPLER_ENABLE
+
+endmenu
