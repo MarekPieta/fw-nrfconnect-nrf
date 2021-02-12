@@ -9,3 +9,6 @@ target_sources_ifdef(CONFIG_EI_APP_DATA_FORWARDER_ENABLE
 
 target_sources_ifdef(CONFIG_EI_APP_SENSOR_SIM_CTRL_ENABLE
 		     app PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/sensor_sim_ctrl.c)
+
+target_sources_ifdef(CONFIG_EI_APP_SENSOR_SAMPLER_ENABLE
+		     app PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/sensor_sampler.c)
