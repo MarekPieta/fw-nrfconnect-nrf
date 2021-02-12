@@ -7,3 +7,5 @@
 zephyr_sources_ifdef(CONFIG_CAF_BUTTONS buttons.c)
 
 zephyr_sources_ifdef(CONFIG_CAF_LEDS leds.c)
+
+zephyr_sources_ifdef(CONFIG_CAF_SENSOR_SAMPLER sensor_sampler.c)

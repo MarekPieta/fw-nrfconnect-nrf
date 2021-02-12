@@ -6,3 +6,4 @@
 
 rsource "Kconfig.buttons"
 rsource "Kconfig.leds"
+rsource "Kconfig.sensor_sampler"
