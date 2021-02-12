@@ -1,0 +1,22 @@
+#
+# Copyright (c) 2021 Nordic Semiconductor
+#
+# SPDX-License-Identifier: LicenseRef-Nordic-5-Clause
+#
+
+menu "Sensor sim controller"
+
+config EI_APP_SENSOR_SIM_CTRL_ENABLE
+	bool "Enable simulated sensor controller"
+	depends on SENSOR_SIM_ACCEL_WAVE
+	default y
+
+if EI_APP_SENSOR_SIM_CTRL_ENABLE
+
+module = EI_APP_SENSOR_SIM_CTRL
+module-str = EI app sensor sim controller
+source "subsys/logging/Kconfig.template.log_config"
+
+endif # EI_APP_SENSOR_SIM_CTRL_ENABLE
+
+endmenu
