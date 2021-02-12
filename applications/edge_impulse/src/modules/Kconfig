@@ -4,5 +4,6 @@
 # SPDX-License-Identifier: LicenseRef-Nordic-5-Clause
 #
 
+rsource "Kconfig.ei_data_forwarder"
 rsource "Kconfig.sensor_sampler"
 rsource "Kconfig.sensor_sim_ctrl"
