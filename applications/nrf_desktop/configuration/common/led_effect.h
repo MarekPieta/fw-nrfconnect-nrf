@@ -25,7 +25,7 @@ extern "C" {
  */
 struct led_color {
 	/** Values for color channels. */
-	uint8_t c[CONFIG_DESKTOP_LED_COLOR_COUNT];
+	uint8_t c[CONFIG_CAF_LEDS_COLOR_COUNT];
 };
 
 
@@ -67,11 +67,11 @@ struct led_effect {
  * The amount of the color channels is defined in the configuration (three
  * channels by default).
  */
-#if CONFIG_DESKTOP_LED_COLOR_COUNT == 1
+#if CONFIG_CAF_LEDS_COLOR_COUNT == 1
 	#define LED_COLOR(_brightness) {	\
 			.c = {_brightness}	\
 		}
-#elif CONFIG_DESKTOP_LED_COLOR_COUNT == 3
+#elif CONFIG_CAF_LEDS_COLOR_COUNT == 3
 	#define LED_COLOR(_r, _g, _b) {		\
 			.c = {_r, _g, _b}	\
 	}
@@ -82,11 +82,11 @@ struct led_effect {
 
 /** Create LED color initializer for LED turned off.
  */
-#if CONFIG_DESKTOP_LED_COLOR_COUNT == 1
+#if CONFIG_CAF_LEDS_COLOR_COUNT == 1
 	#define LED_NOCOLOR() {			\
 			.c = {0}		\
 		}
-#elif CONFIG_DESKTOP_LED_COLOR_COUNT == 3
+#elif CONFIG_CAF_LEDS_COLOR_COUNT == 3
 	#define LED_NOCOLOR() {			\
 			.c = {0, 0, 0}		\
 	}
