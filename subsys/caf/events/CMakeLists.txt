@@ -15,3 +15,7 @@ zephyr_sources_ifdef(CONFIG_CAF_PM_EVENTS
 zephyr_sources_ifdef(CONFIG_CAF_BUTTON_EVENTS
 	button_event.c
 )
+
+zephyr_sources_ifdef(CONFIG_CAF_LED_EVENTS
+	led_event.c
+)
