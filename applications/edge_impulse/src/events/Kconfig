@@ -10,6 +10,10 @@ menu "Event options"
 
 comment "Initially logged events"
 
+config EI_APP_INIT_LOG_EI_RESULT_EVENT
+	bool "Edge Impulse result event"
+	default y
+
 config EI_APP_INIT_LOG_SENSOR_EVENT
 	bool "Sensor event"
 	default y
