@@ -18,3 +18,4 @@ For details about events and their implementation, see the :ref:`event_manager` 
    :caption: Subpages:
 
    caf/buttons
+   caf/leds
