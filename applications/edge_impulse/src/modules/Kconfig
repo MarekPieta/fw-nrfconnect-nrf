@@ -8,3 +8,5 @@ rsource "Kconfig.ei_data_forwarder"
 rsource "Kconfig.ei_ml_runner"
 rsource "Kconfig.sensor_sampler"
 rsource "Kconfig.sensor_sim_ctrl"
+
+rsource "Kconfig.click_detector"
