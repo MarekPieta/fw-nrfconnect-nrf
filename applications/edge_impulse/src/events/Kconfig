@@ -18,6 +18,10 @@ config EI_APP_INIT_LOG_SENSOR_EVENT
 	bool "Sensor event"
 	default y
 
+config DESKTOP_INIT_LOG_CLICK_EVENT
+	bool "nrf_desktop's click event"
+	default y
+
 endmenu
 
 endif
