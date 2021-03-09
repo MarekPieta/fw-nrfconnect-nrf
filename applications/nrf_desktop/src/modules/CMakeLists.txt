@@ -15,9 +15,6 @@ target_sources_ifdef(CONFIG_BT_PERIPHERAL
 target_sources_ifdef(CONFIG_BT_CENTRAL
 		     app PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/ble_conn_params.c)
 
-target_sources_ifdef(CONFIG_DESKTOP_BLE_ADVERTISING_ENABLE
-		     app PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/ble_adv.c)
-
 target_sources_ifdef(CONFIG_DESKTOP_BLE_DISCOVERY_ENABLE
 		     app PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/ble_discovery.c)
 
