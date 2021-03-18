@@ -139,16 +139,18 @@ static bool handle_sensor_event(const struct sensor_event *event)
 			report_error();
 		}
 	} else if (IS_ENABLED(CONFIG_ML_APP_EI_DATA_FORWARDER_BT_NUS)) {
-		if (bt_nus_get_mtu(nus_conn) < pos) {
+		uint32_t mtu = bt_nus_get_mtu(nus_conn);
+
+		if (mtu < pos) {
 			atomic_cas(&uart_busy, true, false);
-			LOG_WRN("GATT MTU too small");
+			LOG_WRN("GATT MTU too small: %d > %u", pos, mtu);
 			return false;
 		}
 
 		int err = bt_nus_send(nus_conn, buf, pos);
 
 		if (err) {
-			LOG_ERR("bt_nus_tx error: %d", err);
+			LOG_WRN("bt_nus_tx error: %d", err);
 			atomic_cas(&uart_busy, true, false);
                         //report_error();
                 }
