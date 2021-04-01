@@ -49,12 +49,26 @@ static void report_error(void)
 
 static void set_wave(void)
 {
-	int err = sensor_sim_set_wave_param(sim_signal_params.chan,
-					    &sim_signal_params.waves[cur_wave_idx]);
+	static const char * const wave_names[] = {
+		[WAVE_GEN_TYPE_SINE] = "sine",
+		[WAVE_GEN_TYPE_TRIANGLE] = "triangle",
+		[WAVE_GEN_TYPE_SQUARE] = "square",
+		[WAVE_GEN_TYPE_NONE] = "none",
+	};
+
+	BUILD_ASSERT(ARRAY_SIZE(wave_names) == WAVE_GEN_TYPE_COUNT);
+
+	const struct wave_gen_param *wp = &sim_signal_params.waves[cur_wave_idx];
+	int err = sensor_sim_set_wave_param(sim_signal_params.chan, wp);
 
 	if (err) {
 		LOG_ERR("Cannot set simulated accel params (err %d)", err);
 		report_error();
+	} else {
+		const char *name = wave_names[wp->type];
+
+		__ASSERT_NO_MSG(name != NULL);
+		LOG_INF("set_wave: %s", name);
 	}
 }
 
