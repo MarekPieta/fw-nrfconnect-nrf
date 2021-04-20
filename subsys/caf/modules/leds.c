@@ -32,7 +32,15 @@ struct led {
 	struct k_delayed_work work;
 };
 
-#define DT_DRV_COMPAT pwm_leds
+#ifdef CONFIG_CAF_LEDS_PWM
+  #define DT_DRV_COMPAT pwm_leds
+  #define DEFAULT_LABEL(id) "LED_PWM_"#id
+#elif defined(CONFIG_CAF_LEDS_GPIO)
+  #define DT_DRV_COMPAT gpio_leds
+  #define DEFAULT_LABEL(id) "leds"
+#else
+  #error "LED driver must be specified in configuration"
+#endif
 
 #define _LED_COLOR_ID(id) 0,
 
@@ -45,7 +53,7 @@ DT_INST_FOREACH_STATUS_OKAY(_LED_COLOR_COUNT)
 
 #define _LED_INSTANCE_DEF(id)						\
 	{								\
-		.label = DT_INST_PROP_OR(id, label, "LED_PWM_"#id),	\
+		.label = DT_INST_PROP_OR(id, label, DEFAULT_LABEL(id)),	\
 		.color_count = ARRAY_SIZE(led_colors_##id),		\
 	},
 
@@ -174,6 +182,19 @@ static int leds_init(void)
 	int err = 0;
 
 	BUILD_ASSERT(DT_HAS_COMPAT_STATUS_OKAY(DT_DRV_COMPAT) > 0, "No LEDs defined");
+
+	/* Avoid referring to the same Zephyr LED device with multiple CAF LED instances. */
+	if (IS_ENABLED(CONFIG_ASSERT) && IS_ENABLED(CONFIG_CAF_LEDS_GPIO)) {
+		size_t default_label_cnt = 0;
+
+		for (size_t i = 0; i < ARRAY_SIZE(leds); i++) {
+			if (!strcmp(leds[i].label, DEFAULT_LABEL(0))) {
+				default_label_cnt++;
+			}
+		}
+
+		__ASSERT_NO_MSG(default_label_cnt <= 1);
+	}
 
 	for (size_t i = 0; (i < ARRAY_SIZE(leds)) && !err; i++) {
 		struct led *led = &leds[i];
