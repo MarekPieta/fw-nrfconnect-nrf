@@ -49,19 +49,12 @@ static inline const void * const module_id_get(size_t idx)
 		&MODULE_ID_PTR_VAR(mname) - &MODULE_ID_LIST_START;  \
 	})
 
-
-/** Module state list. */
-#define MODULE_STATE_LIST	\
-	X(READY)		\
-	X(OFF)			\
-	X(STANDBY)		\
-	X(ERROR)
-
 /** Module states. */
 enum module_state {
-#define X(name) _CONCAT(MODULE_STATE_, name),
-	MODULE_STATE_LIST
-#undef X
+	MODULE_STATE_READY,
+	MODULE_STATE_OFF,
+	MODULE_STATE_STANDBY,
+	MODULE_STATE_ERROR,
 
 	MODULE_STATE_COUNT
 };
@@ -73,8 +66,6 @@ struct module_state_event {
 	const void *module_id;
 	enum module_state state;
 };
-
-EVENT_TYPE_DECLARE(module_state_event);
 
 
 #if defined(MODULE)
@@ -124,5 +115,15 @@ static inline bool check_state(const struct module_state_event *event,
 /**
  * @}
  */
+
+#ifdef __cplusplus
+extern "C" {
+#endif
+
+EVENT_TYPE_DECLARE(module_state_event);
+
+#ifdef __cplusplus
+}
+#endif
 
 #endif /* _MODULE_STATE_EVENT_H_ */

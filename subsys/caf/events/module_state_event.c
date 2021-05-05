@@ -12,9 +12,10 @@
 
 
 static const char * const state_name[] = {
-#define X(name) STRINGIFY(name),
-	MODULE_STATE_LIST
-#undef X
+	[MODULE_STATE_READY] = "READY",
+	[MODULE_STATE_OFF] = "OFF",
+	[MODULE_STATE_STANDBY] = "STANDBY",
+	[MODULE_STATE_ERROR] = "ERROR",
 };
 
 static int log_module_state_event(const struct event_header *eh, char *buf,
@@ -26,6 +27,7 @@ static int log_module_state_event(const struct event_header *eh, char *buf,
 			 "Invalid number of elements");
 
 	__ASSERT_NO_MSG(event->state < MODULE_STATE_COUNT);
+	__ASSERT_NO_MSG(state_name[event->state]);
 
 	return snprintf(buf, buf_len, "module:%s state:%s",
 		      (const char *)event->module_id, state_name[event->state]);

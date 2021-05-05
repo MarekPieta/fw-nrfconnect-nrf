@@ -26,8 +26,6 @@ struct button_event {
 	bool pressed;
 };
 
-EVENT_TYPE_DECLARE(button_event);
-
 #ifdef __cplusplus
 }
 #endif
@@ -35,5 +33,15 @@ EVENT_TYPE_DECLARE(button_event);
 /**
  * @}
  */
+
+#ifdef __cplusplus
+extern "C" {
+#endif
+
+EVENT_TYPE_DECLARE(button_event);
+
+#ifdef __cplusplus
+}
+#endif
 
 #endif /* _BUTTON_EVENT_H_ */
