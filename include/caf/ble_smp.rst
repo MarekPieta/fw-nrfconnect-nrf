@@ -22,6 +22,11 @@ To use the module, you must enable the following Kconfig options:
 * :option:`CONFIG_BOOTLOADER_MCUBOOT` - This option enables the MCUboot bootloader.
   The DFU over Simple Management Protocol in Zephyr is supported only with the MCUboot bootloader.
 
+Optionally, you can also enable :option:`CONFIG_MCUMGR_CMD_OS_MGMT`.
+This option enables MCUmgr OS management handlers, which can be used to remotely trigger device reboot after image transfer is completed.
+After the reboot, device can start using the new firmware.
+The remote reboot functionality is used for example by `nRF Connect for Mobile`_ application.
+
 Implementation details
 **********************
 
