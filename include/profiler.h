@@ -158,6 +158,23 @@ static inline void profiler_log_encode_u32(struct log_event_buf *buf,
 					   uint32_t data) {}
 #endif
 
+/** @brief Encode and add string to a buffer.
+ *
+ * Maximum 255 characters can be sent (the rest is ommited).
+ *  
+ * @warning The buffer must be initialized with @ref profiler_log_start
+ *          before calling this function.
+ *
+ * @param buf Pointer to the data buffer.
+ * @param string String to add to the buffer.
+ */
+#ifdef CONFIG_PROFILER
+void profiler_log_encode_string(struct log_event_buf *buf, const char *string);
+#else
+static inline void profiler_log_encode_string(struct log_event_buf *buf,
+					      const char* string) {}
+#endif
+
 
 /** @brief Encode and add the event's address in memory to the buffer.
  *

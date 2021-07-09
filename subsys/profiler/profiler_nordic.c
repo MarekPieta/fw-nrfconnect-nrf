@@ -257,6 +257,23 @@ void profiler_log_encode_u32(struct log_event_buf *buf, uint32_t data)
 	buf->payload += sizeof(data);
 }
 
+void profiler_log_encode_string(struct log_event_buf *buf, const char *string)
+{
+	size_t string_len = strlen(string);
+
+	/* First byte that is send denotes string length.
+	 * Null character is not being sent.
+	 */
+	if (string_len > UCHAR_MAX) {
+		string_len = UCHAR_MAX;
+	}
+	__ASSERT_NO_MSG(buf->payload - buf->payload_start + 1 + string_len
+			 <= CONFIG_PROFILER_CUSTOM_EVENT_BUF_LEN);
+	*(buf->payload) = (uint8_t) string_len;
+	memcpy(++buf->payload, string, string_len);
+	buf->payload += string_len;
+}
+
 void profiler_log_add_mem_address(struct log_event_buf *buf,
 				  const void *mem_address)
 {
