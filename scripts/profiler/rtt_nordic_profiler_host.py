@@ -289,15 +289,37 @@ class RttNordicProfilerHost:
                 self.after_half = True
 
         timestamp = self._calculate_timestamp_from_clock_ticks(timestamp_raw)
-
-        data = []
-        for i in et.data_types:
-            signum = False
-            if i[0] == 's':
-                signum = True
+        data=[]
+        def int32():
+            signum = True
             buf = self._read_bytes(4)
             data.append(int.from_bytes(buf, byteorder=self.config['byteorder'],
-                                       signed=signum))
+                                    signed=signum))
+
+        def uint32():
+            signum = False
+            buf = self._read_bytes(4)
+            data.append(int.from_bytes(buf, byteorder=self.config['byteorder'],
+                                    signed=signum))
+
+        def string_():
+            buf = self._read_bytes(1)
+            buf = self._read_bytes(int.from_bytes(buf, byteorder=self.config['byteorder'],
+                                    signed=False))
+            data.append(buf.decode())
+
+        READ_BYTES = {
+            "u8": uint32,
+            "s8": int32,
+            "u16": uint32,
+            "s16": int32,
+            "u32": uint32,
+            "s32": int32,
+            "s": string_,
+            "t": uint32
+        }
+        for i in et.data_types:
+            READ_BYTES[i]()
         return Event(id, timestamp, data)
 
     def _read_remaining_events(self):

@@ -78,8 +78,8 @@ class EventsData():
         self._write_events_types_json(filename_event_types, csv_hash)
 
     def read_data_from_files(self, filename_events, filename_event_types):
-        self._read_events_csv(filename_events)
         csv_hash1 = self._read_events_types_json(filename_event_types)
+        self._read_events_csv(filename_events)
         csv_hash2 = EventsData._calculate_md5_hash_of_file(filename_events)
         if csv_hash1 != csv_hash2:
             self.logger.warning("Hash values of csv files do not match")
@@ -109,12 +109,19 @@ class EventsData():
         try:
             with open(filename, 'r', newline='') as csvfile:
                 rd = csv.DictReader(csvfile, delimiter=',')
+                def string2data(s, data_type):
+                    if data_type == "s":
+                        return s
+                    else:
+                        return int(s)
+
                 for row in rd:
                     type_id = int(row['type_id'])
                     timestamp = float(row['timestamp'])
                     # reading event data from single row in csv file
                     if (row['data'][1:-1] != ''):
-                        data = list(map(int, (row['data'][1:-1].split(','))))
+                        data = list(map(string2data, (row['data'][1:-1].split(',')),
+                                                      self.registered_events_types[type_id].data_types))
                     else:
                         data = []
                     ev = Event(type_id, timestamp, data)
