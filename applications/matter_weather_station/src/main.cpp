@@ -16,7 +16,33 @@
 #include <platform/CHIPDeviceLayer.h>
 #include <system/SystemError.h>
 
+#include <power/reboot.h>
+#include <random/rand32.h>
+
+
 LOG_MODULE_REGISTER(app);
+
+
+static void wait_and_reboot(void)
+{
+       uint32_t sleep_time_max = 15000;
+       uint32_t sleep_time = sys_rand32_get() % sleep_time_max;
+
+       k_sleep(K_MSEC(sleep_time));
+       uint32_t log_sleep_time_max = 2000;
+       uint32_t log_sleep_time = sys_rand32_get() % log_sleep_time_max;
+
+       printk("tralalalalalalalalalalalaalalalalalalalalalalalalalalalalalalalalalalalalalalala");
+       printk("tralalalalalalalalalalalaalalalalalalalalalalalalalalalalalalalalalalalalalalala");
+       printk("tralalalalalalalalalalalaalalalalalalalalalalalalalalalalalalalalalalalalalalala");
+       printk("tralalalalalalalalalalalaalalalalalalalalalalalalalalalalalalalalalalalalalalala");
+       printk("tralalalalalalalalalalalaalalalalalalalalalalalalalalalalalalalalalalalalalalala");
+       printk("tralalalalalalalalalalalaalalalalalalalalalalalalalalalalalalalalalalalalalalala");
+       printk("tralalalalalalalalalalalaalalalalalalalalalalalalalalalalalalalalalalalalalalala");
+       printk("tralalalalalalalalalalalaalalalalalalalalalalalalalalalalalalalalalalalalalalala");
+       k_sleep(K_MSEC(log_sleep_time));
+       sys_reboot(SYS_REBOOT_WARM);
+}
 
 using namespace ::chip::DeviceLayer;
 
@@ -83,6 +109,8 @@ int main()
 		goto exit;
 	}
 #endif
+
+	wait_and_reboot();
 
 	ret = GetAppTask().StartApp();
 	if (ret != 0) {

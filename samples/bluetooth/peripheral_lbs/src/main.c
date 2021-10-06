@@ -20,6 +20,10 @@
 #include <bluetooth/uuid.h>
 #include <bluetooth/gatt.h>
 
+
+#include <power/reboot.h>
+#include <random/rand32.h>
+
 #include <bluetooth/services/lbs.h>
 
 #include <settings/settings.h>
@@ -49,6 +53,19 @@ static const struct bt_data sd[] = {
 	BT_DATA_BYTES(BT_DATA_UUID128_ALL, BT_UUID_LBS_VAL),
 };
 
+
+void assert_post_action(const char *file, unsigned int line)
+{
+    static struct k_spinlock lock;
+    k_spinlock_key_t key = k_spin_lock(&lock);
+ 
+    while(1){
+        k_busy_wait(100);
+    }
+
+    k_spin_unlock(&lock, key);
+}
+
 static void connected(struct bt_conn *conn, uint8_t err)
 {
 	if (err) {
@@ -59,6 +76,19 @@ static void connected(struct bt_conn *conn, uint8_t err)
 	printk("Connected\n");
 
 	dk_set_led_on(CON_STATUS_LED);
+}
+
+static void wait_and_reboot(void)
+{
+	uint32_t sleep_time_max = 15000;
+	uint32_t sleep_time = sys_rand32_get() % sleep_time_max;
+
+	k_sleep(K_MSEC(sleep_time));
+	uint32_t log_sleep_time_max = 2000;
+	uint32_t log_sleep_time = sys_rand32_get() % log_sleep_time_max;
+
+	k_sleep(K_MSEC(log_sleep_time));
+	sys_reboot(SYS_REBOOT_WARM);
 }
 
 static void disconnected(struct bt_conn *conn, uint8_t reason)
@@ -243,5 +273,7 @@ void main(void)
 	for (;;) {
 		dk_set_led(RUN_STATUS_LED, (++blink_status) % 2);
 		k_sleep(K_MSEC(RUN_LED_BLINK_INTERVAL));
+
+		wait_and_reboot();
 	}
 }

@@ -6,16 +6,12 @@
 
 #include <init.h>
 
-#include <img_mgmt/img_mgmt.h>
-#include <os_mgmt/os_mgmt.h>
-#include <mgmt/mcumgr/smp_bt.h>
-
 #include <usb/usb_device.h>
 
 #include <logging/log.h>
 LOG_MODULE_REGISTER(thingy53_setup);
 
-
+/*
 static int bt_smp_init(const struct device *dev)
 {
 	ARG_UNUSED(dev);
@@ -32,6 +28,7 @@ static int bt_smp_init(const struct device *dev)
 
 	return err;
 }
+*/
 
 static int usb_cdc_init(const struct device *dev)
 {
@@ -44,5 +41,5 @@ static int usb_cdc_init(const struct device *dev)
 	return err;
 }
 
-SYS_INIT(bt_smp_init, APPLICATION, CONFIG_APPLICATION_INIT_PRIORITY);
+//SYS_INIT(bt_smp_init, APPLICATION, CONFIG_APPLICATION_INIT_PRIORITY);
 SYS_INIT(usb_cdc_init, APPLICATION, CONFIG_APPLICATION_INIT_PRIORITY);
