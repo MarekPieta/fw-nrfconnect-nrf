@@ -15,6 +15,7 @@ if(${EI_URI} MATCHES "^[a-z]+://")
                        " on local hard drive.")
 endif()
 
+string(CONFIGURE ${EI_URI} EI_URI)
 if(NOT IS_ABSOLUTE ${EI_URI})
   set(EI_URI ${APPLICATION_SOURCE_DIR}/${EI_URI})
 endif()

@@ -23,6 +23,7 @@ endif()
 set(EI_URI ${CONFIG_EDGE_IMPULSE_URI})
 
 if(NOT ${EI_URI} MATCHES "^[a-z]+://")
+  string(CONFIGURE ${EI_URI} EI_URI)
   if(NOT IS_ABSOLUTE ${EI_URI})
     # Using application source directory as base directory for relative path.
     set(EI_URI ${APPLICATION_SOURCE_DIR}/${EI_URI})
