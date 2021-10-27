@@ -67,11 +67,13 @@ class ModelCreator:
         self.logger_console.setFormatter(self.log_format)
         self.logger.addHandler(self.logger_console)
 
-    def shutdown(self):
+    def _shutdown(self):
         if self.csvfile is not None:
             self.processed_events.finish_writing_data_to_files(self.csvfile,
                                                                self.event_filename,
                                                                self.event_types_filename)
+            self.logger.info("Events data saved to files")
+        sys.exit()
 
     def _get_buffered_data(self, num_bytes):
         buf = bytearray()
@@ -94,8 +96,12 @@ class ModelCreator:
             try:
                 buf = self.in_stream.recv_ev()
             except StreamError as err:
-                self.logger.error("Receiving error: {}".format(err))
-                self.close()
+                # Timeout could occur only when module is being closed.
+                # Then it's an expected behavior.
+                if err.args[1] != 'timeout':
+                    self.logger.error("Receiving error: {}".format(err))
+                break
+
             if len(buf) > 0:
                 self.bufs.append(buf)
                 self.bcnt += len(buf)
@@ -114,6 +120,7 @@ class ModelCreator:
         except StreamError as err:
             self.logger.error("Receiving error: {}. Exiting".format(err))
             sys.exit()
+
         desc_buf = bytes.decode()
         f = StringIO(desc_buf)
         reader = csv.reader(f, delimiter=',')
@@ -145,21 +152,13 @@ class ModelCreator:
                 sys.exit()
 
     def _read_single_event(self):
-        id = int.from_bytes(
-            self._read_bytes(1),
-            byteorder=self.config['byteorder'],
-            signed=False)
+        id = int.from_bytes(self._read_bytes(1), byteorder=self.config['byteorder'], signed=False)
         et = self.raw_data.registered_events_types[id]
 
         buf = self._read_bytes(4)
-        timestamp_raw = (
-            int.from_bytes(
-                buf,
-                byteorder=self.config['byteorder'],
-                signed=False))
+        timestamp_raw = (int.from_bytes(buf, byteorder=self.config['byteorder'], signed=False))
 
-        if self.after_half \
-        and timestamp_raw < 0.4 * self.config['timestamp_raw_max']:
+        if self.after_half and timestamp_raw < 0.4 * self.config['timestamp_raw_max']:
             self.timestamp_overflows += 1
             self.after_half = False
 
@@ -170,33 +169,27 @@ class ModelCreator:
 
         def process_int32(self, data):
             buf = self._read_bytes(4)
-            data.append(int.from_bytes(buf, byteorder=self.config['byteorder'],
-                                       signed=True))
+            data.append(int.from_bytes(buf, byteorder=self.config['byteorder'], signed=True))
 
         def process_uint32(self, data):
             buf = self._read_bytes(4)
-            data.append(int.from_bytes(buf, byteorder=self.config['byteorder'],
-                                       signed=False))
+            data.append(int.from_bytes(buf, byteorder=self.config['byteorder'], signed=False))
 
         def process_int16(self, data):
             buf = self._read_bytes(2)
-            data.append(int.from_bytes(buf, byteorder=self.config['byteorder'],
-                                       signed=True))
+            data.append(int.from_bytes(buf, byteorder=self.config['byteorder'], signed=True))
 
         def process_uint16(self, data):
             buf = self._read_bytes(2)
-            data.append(int.from_bytes(buf, byteorder=self.config['byteorder'],
-                                       signed=False))
+            data.append(int.from_bytes(buf, byteorder=self.config['byteorder'], signed=False))
 
         def process_int8(self, data):
             buf = self._read_bytes(1)
-            data.append(int.from_bytes(buf, byteorder=self.config['byteorder'],
-                                       signed=True))
+            data.append(int.from_bytes(buf, byteorder=self.config['byteorder'], signed=True))
 
         def process_uint8(self, data):
             buf = self._read_bytes(1)
-            data.append(int.from_bytes(buf, byteorder=self.config['byteorder'],
-                                       signed=False))
+            data.append(int.from_bytes(buf, byteorder=self.config['byteorder'], signed=False))
 
         def process_string(self, data):
             buf = self._read_bytes(1)
@@ -227,14 +220,47 @@ class ModelCreator:
             if err.args[1] != 'closed':
                 self.logger.error("Error. Unable to send data: {}".format(err))
             # Receiver has been closed
-            self.close()
+            self.sending = False
 
     def _write_event_to_file(self, csvfile, tracked_event):
         try:
             csvfile.write(tracked_event.serialize() + '\r\n')
         except IOError:
             self.logger.error("Problem with accessing csv file")
-            self.close()
+
+    def _process_event(self, event):
+        if event.type_id == self.event_processing_start_id:
+            self.start_event = event
+            for i in range(len(self.temp_events) - 1, -1, -1):
+                # comparing memory addresses of event processing start
+                # and event submit to identify matching events
+                if self.temp_events[i].data[0] == self.start_event.data[0]:
+                    self.submit_event = self.temp_events[i]
+                    self.submitted_event_type = self.submit_event.type_id
+                    del self.temp_events[i]
+                    break
+
+        elif event.type_id == self.event_processing_end_id:
+            # comparing memory addresses of event processing start and
+            # end to identify matching events
+            if self.submitted_event_type is not None and event.data[0] == self.start_event.data[0]:
+                tracked_event = TrackedEvent(self.submit_event, self.start_event.timestamp,
+                                             event.timestamp)
+                if self.csvfile is not None:
+                    self._write_event_to_file(self.csvfile, tracked_event)
+                if self.sending:
+                    self._send_event(tracked_event)
+                self.submitted_event_type = None
+
+        elif not self.processed_events.is_event_tracked(event.type_id):
+            tracked_event = TrackedEvent(event, None, None)
+            if self.csvfile is not None:
+                self._write_event_to_file(self.csvfile, tracked_event)
+            if self.sending:
+                self._send_event(tracked_event)
+
+        else:
+            self.temp_events.append(event)
 
     def transmit_events(self):
         if self.event_filename and self.event_types_filename:
@@ -243,49 +269,21 @@ class ModelCreator:
                 self.event_types_filename)
         while True:
             event = self._read_single_event()
-
-            if event.type_id == self.event_processing_start_id:
-                self.start_event = event
-                for i in range(len(self.temp_events) - 1, -1, -1):
-                    # comparing memory addresses of event processing start
-                    # and event submit to identify matching events
-                    if self.temp_events[i].data[0] == self.start_event.data[0]:
-                        self.submit_event = self.temp_events[i]
-                        self.submitted_event_type = self.submit_event.type_id
-                        del self.temp_events[i]
-                        break
-
-            elif event.type_id == self.event_processing_end_id:
-                # comparing memory addresses of event processing start and
-                # end to identify matching events
-                if self.submitted_event_type is not None and event.data[0] \
-                            == self.start_event.data[0]:
-                    tracked_event = TrackedEvent(
-                            self.submit_event,
-                            self.start_event.timestamp,
-                            event.timestamp)
-                    if self.csvfile is not None:
-                        self._write_event_to_file(self.csvfile, tracked_event)
-                    if self.sending:
-                        self._send_event(tracked_event)
-                    self.submitted_event_type = None
-
-            elif not self.processed_events.is_event_tracked(event.type_id):
-                tracked_event = TrackedEvent(event, None, None)
-                if self.csvfile is not None:
-                    self._write_event_to_file(self.csvfile, tracked_event)
-                if self.sending:
-                    self._send_event(tracked_event)
-
-            else:
-                self.temp_events.append(event)
+            self._process_event(event)
 
     def start(self):
         self.transmit_all_events_descriptions()
         self.transmit_events()
 
     def close(self):
-        self.logger.info("Real time transmission closed")
-        self.shutdown()
-        self.logger.info("Events data saved to files")
-        sys.exit()
+        self.logger.info("Closed")
+
+        # Process remaining events. Do not send data over socket, just save the data to file.
+        self.sending = False
+        self.in_stream.set_timeouts(0, 0)
+
+        # self._shutdown will be executed on receive timeout occuring when all of the data is read
+        # from socket.
+        while True:
+            event = self._read_single_event()
+            self._process_event(event)

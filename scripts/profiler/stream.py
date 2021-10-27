@@ -15,10 +15,9 @@ class Stream():
     def __init__(self, own_socket_dict, timeouts, remote_socket_dict=None):
         self.own_sock_desc = socket.socket(socket.AF_UNIX, socket.SOCK_DGRAM)
         self.own_sock_desc.bind(own_socket_dict['descriptions'])
-        self.own_sock_desc.settimeout(timeouts['descriptions'])
         self.own_sock_ev = socket.socket(socket.AF_UNIX, socket.SOCK_DGRAM)
         self.own_sock_ev.bind(own_socket_dict['events'])
-        self.own_sock_ev.settimeout(timeouts['events'])
+        self.set_timeouts(timeouts['descriptions'], timeouts['events'])
 
         self.remote_socket_dict = remote_socket_dict
 
@@ -58,3 +57,7 @@ class Stream():
 
     def recv_ev(self):
         return self._receive(self.own_sock_ev)
+
+    def set_timeouts(self, sock_desc_timeout, sock_ev_timeout):
+        self.own_sock_desc.settimeout(sock_desc_timeout)
+        self.own_sock_ev.settimeout(sock_ev_timeout)
