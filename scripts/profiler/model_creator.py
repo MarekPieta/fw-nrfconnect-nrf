@@ -24,6 +24,7 @@ PROFILER_FATAL_ERROR_EVENT_NAME = "_profiler_fatal_error_event_"
 class ModelCreator:
 
     def __init__(self, stream,
+                 event_close,
                  sending_events=False,
                  config=RttNordicConfig,
                  event_filename=None,
@@ -35,9 +36,11 @@ class ModelCreator:
         self.event_types_filename = event_types_filename
         self.csvfile = None
 
+        self.event_close = event_close
+
         timeouts = {
-            'descriptions': None,
-            'events': None
+            'descriptions': 1,
+            'events': 1
         }
         self.stream = stream
         self.stream.set_timeouts(timeouts)
@@ -92,6 +95,10 @@ class ModelCreator:
             try:
                 buf = self.stream.recv_ev()
             except StreamError as err:
+                if err.args[1] == StreamError.TIMEOUT_MSG:
+                    if self.event_close.is_set():
+                        self.close()
+                    continue
                 self.logger.error("Receiving error: {}".format(err))
                 self.close()
             if len(buf) > 0:
@@ -112,7 +119,12 @@ class ModelCreator:
                 bytes = self.stream.recv_desc()
                 break
             except StreamError as err:
-                self.logger.error("Receiving error: {}. Exiting.".format(err))
+                if err.args[1] == StreamError.TIMEOUT_MSG:
+                    if self.event_close.is_set():
+                        self.logger.error("Module closed before receiving event descriptions. Exiting.")
+                        sys.exit()
+                    continue
+                self.logger.error("Receiving error: {}. Exiting".format(err))
                 sys.exit()
         desc_buf = bytes.decode()
         f = StringIO(desc_buf)
