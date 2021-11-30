@@ -11,6 +11,10 @@
 #include <sys/__assert.h>
 #include <mpsl.h>
 #include <mpsl_timeslot.h>
+
+#include <mpsl_radio_notification.h>
+#include <drivers/gpio.h>
+
 #include <mpsl/mpsl_assert.h>
 #include "multithreading_lock.h"
 #if defined(CONFIG_NRFX_DPPI)
@@ -142,6 +146,71 @@ static uint8_t m_config_clock_source_get(void)
 #endif
 }
 
+static const struct device *gpio_dev;
+static const char *gpio_dev_name = "GPIO_0";
+static const int gpio_pin = 8;
+
+static struct k_work_delayable disable_gpio;
+static struct k_spinlock lock;
+static volatile bool enabled = true;
+
+void disable_gpio_fn(struct k_work *w)
+{
+	/* Work may be interrupted by the pwm_mode_control_handler, that may result
+	 * in problems with cancelling work. Ensure that GPIO state will be proper.
+	 */
+	k_spinlock_key_t key = k_spin_lock(&lock);
+	if (enabled) {
+		(void)gpio_pin_set_raw(gpio_dev, gpio_pin, 0);
+	}
+	k_spin_unlock(&lock, key);
+}
+
+void pwm_mode_control_handler(const void *context)
+{
+	if (enabled) {
+		(void)gpio_pin_set_raw(gpio_dev, gpio_pin, 1);
+		k_work_cancel_delayable(&disable_gpio);
+	} else {
+		k_work_reschedule(&disable_gpio, K_MSEC(1));
+	}
+
+	enabled = !enabled;
+}
+
+static int pwm_mode_control_init(void)
+{
+	k_work_init_delayable(&disable_gpio, disable_gpio_fn);
+
+	int err = 0;
+
+	gpio_dev = device_get_binding(gpio_dev_name);
+
+	if (!gpio_dev) {
+		LOG_ERR("Cannot get GPIO device binding");
+		return -ENXIO;
+	}
+
+	err = gpio_pin_configure(gpio_dev, gpio_pin, GPIO_OUTPUT);
+	if (err) {
+		LOG_ERR("GPIO config failed (err %d)\n", err);
+		return err;
+	}
+
+	err = mpsl_radio_notification_cfg_set(MPSL_RADIO_NOTIFICATION_TYPE_INT_ON_BOTH,
+					      MPSL_RADIO_NOTIFICATION_DISTANCE_4560US,
+					      SWI2_IRQn);
+	if (err) {
+		LOG_ERR("mpsl_radio_notification_cfg_set failed (err %d)\n", err);
+		return err;
+	}
+
+	IRQ_CONNECT(SWI2_IRQn, 0, pwm_mode_control_handler, NULL, 0);
+	irq_enable(SWI2_IRQn);
+
+	return err;
+}
+
 static int mpsl_lib_init(const struct device *dev)
 {
 	ARG_UNUSED(dev);
@@ -194,6 +263,11 @@ static int mpsl_lib_init(const struct device *dev)
 static int mpsl_signal_thread_init(const struct device *dev)
 {
 	ARG_UNUSED(dev);
+
+	int err = pwm_mode_control_init();
+	if (err) {
+		return err;
+	}
 
 	k_thread_create(&signal_thread_data, signal_thread_stack,
 			K_THREAD_STACK_SIZEOF(signal_thread_stack),
