@@ -197,9 +197,9 @@ void main(void)
 	}
 
 	bt_conn_cb_register(&conn_callbacks);
-	if (IS_ENABLED(CONFIG_BT_LBS_SECURITY_ENABLED)) {
-		bt_conn_auth_cb_register(&conn_auth_callbacks);
-	}
+//	if (IS_ENABLED(CONFIG_BT_LBS_SECURITY_ENABLED)) {
+//		bt_conn_auth_cb_register(&conn_auth_callbacks);
+//	}
 
 	err = bt_enable(NULL);
 	if (err) {
