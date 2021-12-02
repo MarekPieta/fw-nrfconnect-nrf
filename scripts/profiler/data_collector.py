@@ -10,16 +10,31 @@ import logging
 from stream import Stream
 from rtt2stream import Rtt2Stream
 from model_creator import ModelCreator
+import signal
+
+# Setting these events results in closing corresponding modules.
+event_close_rtt2stream = Event()
+event_close_model_creator = Event()
+
+def signal_handler(sig, frame):
+    print('You pressed Ctrl+C!')
+    event_close_rtt2stream.set()
+    event_close_model_creator.set()
 
 def rtt2stream(stream, event, event_close, log_lvl_number):
+    signal.signal(signal.SIGINT, signal.SIG_IGN)
+
     try:
         rtt2s = Rtt2Stream(stream, event_close, log_lvl=log_lvl_number)
         event.wait()
         rtt2s.read_and_transmit_data()
     except KeyboardInterrupt:
+        print("I kuniec")
         rtt2s.close()
 
 def model_creator(stream, event, event_close, dataset_name, log_lvl_number):
+    signal.signal(signal.SIGINT, signal.SIG_IGN)
+    
     try:
         mc = ModelCreator(stream,
                           event_close,
@@ -30,10 +45,12 @@ def model_creator(stream, event, event_close, dataset_name, log_lvl_number):
         event.set()
         mc.start()
     except KeyboardInterrupt:
+        print("I kuniec")
         mc.close()
 
 
 def main():
+    signal.signal(signal.SIGINT, signal_handler)
     parser = argparse.ArgumentParser(
         description='Collecting data from Nordic profiler for given time and saving to files.')
     parser.add_argument('time', type=int, help='Time of collecting data [s]')
@@ -48,9 +65,7 @@ def main():
 
     # Event is made to ensure that ModelCreator class is initialized before Rtt2Stream starts sending data
     event = Event()
-    # Setting these events results in closing corresponding modules.
-    event_close_rtt2stream = Event()
-    event_close_model_creator = Event()
+
 
     streams = Stream.create_stream(2)
 
@@ -76,6 +91,7 @@ def main():
                 p.join(timeout=0.5)
                 # Terminate other processes if one of the processes is not active.
                 if len(processes) > len(active_children()):
+                    print("Child inactive")
                     is_waiting = False
                     break
 
@@ -83,6 +99,7 @@ def main():
                 if (time.time() - start_time) >= args.time:
                     is_waiting = False
                     break
+            print("Krece siee")
 
         for p, event_close in processes:
             if p.is_alive():
