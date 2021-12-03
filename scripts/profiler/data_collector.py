@@ -14,7 +14,6 @@ from rtt2stream import Rtt2Stream
 from model_creator import ModelCreator
 
 def rtt2stream(stream, event, event_close, log_lvl_number):
-    signal.signal(signal.SIGINT, signal.SIG_IGN)
     try:
         rtt2s = Rtt2Stream(stream, event_close, log_lvl=log_lvl_number)
         event.wait()
@@ -23,7 +22,6 @@ def rtt2stream(stream, event, event_close, log_lvl_number):
         print("[ERROR] Unhandled exception in Profiler Rtt to stream module: {}".format(e))
 
 def model_creator(stream, event, event_close, dataset_name, log_lvl_number):
-    signal.signal(signal.SIGINT, signal.SIG_IGN)
     try:
         mc = ModelCreator(stream,
                           event_close,
@@ -36,8 +34,11 @@ def model_creator(stream, event, event_close, dataset_name, log_lvl_number):
     except Exception as e:
         print("[ERROR] Unhandled exception in Profiler model creator module: {}".format(e))
 
+def signal_handler(sig, frame):
+    print("sigint")
 
 def main():
+    signal.pthread_sigmask(signal.SIG_BLOCK, {signal.SIGINT})
     parser = argparse.ArgumentParser(
         description='Collecting data from Nordic profiler for given time and saving to files.')
     parser.add_argument('time', type=int, help='Time of collecting data [s]')
@@ -76,11 +77,6 @@ def main():
                 # Ensure that we stop processes in order to prevent profiler data drop.
                 p.join()
 
-    def signal_handler(sig, frame):
-        close_processes()
-        sys.exit()
-
-    signal.signal(signal.SIGINT, signal_handler)
 
     for p, _ in processes:
         p.start()
