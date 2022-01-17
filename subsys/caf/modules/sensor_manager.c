@@ -484,7 +484,7 @@ static bool handle_power_down_event(const struct event_header *eh)
 	return false;
 }
 
-static bool handle_wake_up_event(const struct event_header *eh)
+static bool __attribute__((optimize("O0"))) handle_wake_up_event(const struct event_header *eh)
 {
 	for (size_t i = 0; i < ARRAY_SIZE(sensor_data); i++) {
 		struct sensor_data *sd = &sensor_data[i];

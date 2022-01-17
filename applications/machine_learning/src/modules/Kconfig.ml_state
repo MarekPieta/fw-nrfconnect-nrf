@@ -15,7 +15,6 @@ if ML_APP_ML_STATE
 config ML_APP_ML_STATE_CONTROL_BUTTON_ID
 	hex "Key ID of button used to control machine learning state"
 	range 0x0000 0xffff
-	depends on ML_APP_ML_RUNNER && ML_APP_EI_DATA_FORWARDER
 
 module = ML_APP_ML_STATE
 module-str = machine learning state
