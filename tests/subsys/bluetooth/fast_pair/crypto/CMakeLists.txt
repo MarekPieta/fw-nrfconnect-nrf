@@ -20,4 +20,6 @@ target_sources_ifdef(CONFIG_BT_FAST_PAIR_CRYPTO_MBEDTLS app
 		     PRIVATE ${NCS_FAST_PAIR_BASE}/crypto/fp_crypto_mbedtls.c)
 target_sources_ifdef(CONFIG_BT_FAST_PAIR_CRYPTO_TINYCRYPT app
 		     PRIVATE ${NCS_FAST_PAIR_BASE}/crypto/fp_crypto_tinycrypt.c)
+target_sources_ifdef(CONFIG_BT_FAST_PAIR_CRYPTO_NRF_SECURITY app
+		     PRIVATE ${NCS_FAST_PAIR_BASE}/crypto/fp_crypto_nrf_security.c)
 target_include_directories(app PRIVATE ${NCS_FAST_PAIR_BASE}/include)

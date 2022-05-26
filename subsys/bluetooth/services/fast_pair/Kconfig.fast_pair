@@ -97,8 +97,7 @@ if BT_FAST_PAIR_CRYPTO
 
 choice BT_FAST_PAIR_CRYPTO_BACKEND
 	prompt "Fast Pair cryptographic backend selection"
-	default BT_FAST_PAIR_CRYPTO_TINYCRYPT if BUILD_WITH_TFM
-	default BT_FAST_PAIR_CRYPTO_MBEDTLS
+	default BT_FAST_PAIR_CRYPTO_NRF_SECURITY
 	help
 	  Select the Fast Pair cryptographic backend.
 
@@ -117,6 +116,12 @@ config BT_FAST_PAIR_CRYPTO_MBEDTLS
 	select MBEDTLS_ENABLE_HEAP
 	help
 	  Select MbedTLS cryptographic backend for Fast Pair.
+
+config BT_FAST_PAIR_CRYPTO_NRF_SECURITY
+	bool "Fast Pair with nRF Security cryptographic backend"
+	select NRF_SECURITY
+	help
+	  Select nRF Security cryptographic backend for Fast Pair.
 
 endchoice
 
