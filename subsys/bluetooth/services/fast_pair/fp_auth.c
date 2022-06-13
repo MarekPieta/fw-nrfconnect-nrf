@@ -16,7 +16,6 @@ LOG_MODULE_DECLARE(fast_pair, CONFIG_BT_FAST_PAIR_LOG_LEVEL);
 #define EMPTY_PASSKEY	0xffffffff
 #define USED_PASSKEY	0xfffffffe
 
-extern const struct bt_conn_auth_cb *bt_auth;
 static const struct bt_conn_auth_cb *prev_bt_auth;
 
 static uint32_t bt_auth_peer_passkeys[CONFIG_BT_MAX_CONN];
@@ -190,9 +189,14 @@ static void update_bt_auth_callbacks(void)
 	int err;
 
 	if (handled_conn_bm != 0) {
-		if (bt_auth != &conn_auth_callbacks) {
-			prev_bt_auth = bt_auth;
-			bt_auth = &conn_auth_callbacks;
+		if (bt_conn_auth_cb_get() != &conn_auth_callbacks) {
+			prev_bt_auth = bt_conn_auth_cb_get();
+
+			err = bt_conn_auth_cb_register(NULL);
+			if (!err) {
+				err = bt_conn_auth_cb_register(&conn_auth_callbacks);
+			}
+			__ASSERT_NO_MSG(!err);
 
 			err = bt_conn_auth_info_cb_register(&conn_auth_info_callbacks);
 
@@ -201,8 +205,12 @@ static void update_bt_auth_callbacks(void)
 			}
 		}
 	} else {
-		if (bt_auth == &conn_auth_callbacks) {
-			bt_auth = prev_bt_auth;
+		if (bt_conn_auth_cb_get() == &conn_auth_callbacks) {
+			err = bt_conn_auth_cb_register(NULL);
+			if (!err && prev_bt_auth) {
+				err = bt_conn_auth_cb_register(prev_bt_auth);
+			}
+			__ASSERT_NO_MSG(!err);
 
 			err = bt_conn_auth_info_cb_unregister(&conn_auth_info_callbacks);
 
