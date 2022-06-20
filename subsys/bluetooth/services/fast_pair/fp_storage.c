@@ -56,7 +56,7 @@ static int fp_storage_load_ak(const char *name, size_t len, settings_read_cb rea
 		return -EINVAL;
 	}
 
-	index = key_id_to_idx(data.account_key_id);
+	index = account_key_id_to_idx(data.account_key_id);
 	name_suffix = &name[sizeof(SETTINGS_AK_NAME_PREFIX) - 1];
 	name_suffix_len = strlen(name_suffix);
 
@@ -124,7 +124,8 @@ static bool id_sequence_check(uint8_t start_idx)
 {
 	__ASSERT_NO_MSG(start_idx > 0);
 	for (size_t i = start_idx; i < ACCOUNT_KEY_CNT; i++) {
-		if (account_key_loaded_ids[i] != next_key_id(account_key_loaded_ids[i - 1])) {
+		if (account_key_loaded_ids[i] !=
+		    next_account_key_id(account_key_loaded_ids[i - 1])) {
 			return false;
 		}
 	}
@@ -150,7 +151,7 @@ static int fp_settings_commit(void)
 	}
 
 	cur_id = account_key_loaded_ids[0];
-	if ((cur_id != 0) && (key_id_to_idx(cur_id) != 0)) {
+	if ((cur_id != 0) && (account_key_id_to_idx(cur_id) != 0)) {
 		return -EINVAL;
 	}
 
@@ -170,7 +171,7 @@ static int fp_settings_commit(void)
 			first_zero_idx = i;
 			break;
 		}
-		if (cur_id != next_key_id(prev_id)) {
+		if (cur_id != next_account_key_id(prev_id)) {
 			if (!rollover_check(cur_id, prev_id)) {
 				return -EINVAL;
 			}
@@ -193,10 +194,11 @@ static int fp_settings_commit(void)
 		}
 
 		account_key_count = ACCOUNT_KEY_CNT;
-		account_key_next_id = next_key_id(account_key_loaded_ids[rollover_idx - 1]);
+		account_key_next_id = next_account_key_id(account_key_loaded_ids[rollover_idx - 1]);
 	} else {
 		account_key_count = ACCOUNT_KEY_CNT;
-		account_key_next_id = next_key_id(account_key_loaded_ids[ACCOUNT_KEY_CNT - 1]);
+		account_key_next_id = next_account_key_id(
+					account_key_loaded_ids[ACCOUNT_KEY_CNT - 1]);
 	}
 
 	atomic_set(&settings_loaded, true);
@@ -281,7 +283,7 @@ int fp_storage_account_key_save(const uint8_t *account_key)
 		LOG_INF("Account Key List full - erasing the oldest Account Key.");
 	}
 
-	index = key_id_to_idx(account_key_next_id);
+	index = account_key_id_to_idx(account_key_next_id);
 
 	data.account_key_id = account_key_next_id;
 	memcpy(data.account_key, account_key, FP_CRYPTO_ACCOUNT_KEY_LEN);
@@ -299,7 +301,7 @@ int fp_storage_account_key_save(const uint8_t *account_key)
 
 	memcpy(account_key_list[index], account_key, FP_CRYPTO_ACCOUNT_KEY_LEN);
 
-	account_key_next_id = next_key_id(account_key_next_id);
+	account_key_next_id = next_account_key_id(account_key_next_id);
 
 	if (account_key_count < ACCOUNT_KEY_CNT) {
 		account_key_count++;

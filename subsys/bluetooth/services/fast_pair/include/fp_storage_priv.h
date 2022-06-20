@@ -71,7 +71,7 @@ struct account_key_data {
  *
  * @return Account Key index.
  */
-static inline uint8_t key_id_to_idx(uint8_t account_key_id)
+static inline uint8_t account_key_id_to_idx(uint8_t account_key_id)
 {
         __ASSERT_NO_MSG(account_key_id >= ACCOUNT_KEY_MIN_ID);
 
@@ -80,17 +80,17 @@ static inline uint8_t key_id_to_idx(uint8_t account_key_id)
 
 /** Generate next Account Key ID.
  *
- * @param[in] key_id		Current Account Key ID.
+ * @param[in] account_key_id		Current Account Key ID.
  *
  * @return Next Account Key ID.
  */
-static inline uint8_t next_key_id(uint8_t key_id)
+static inline uint8_t next_account_key_id(uint8_t account_key_id)
 {
-        if (key_id == ACCOUNT_KEY_MAX_ID) {
+        if (account_key_id == ACCOUNT_KEY_MAX_ID) {
                 return ACCOUNT_KEY_MIN_ID;
         }
 
-        return key_id + 1;
+        return account_key_id + 1;
 }
 
 #ifdef __cplusplus
