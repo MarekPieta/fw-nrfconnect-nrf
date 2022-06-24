@@ -21,7 +21,9 @@ struct wdt_data_storage {
 	int wdt_channel_id;
 	struct k_work_delayable work;
 };
-static struct wdt_data_storage wdt_data;
+static struct wdt_data_storage wdt_data = {
+	.wdt_drv = DEVICE_DT_GET(DT_NODELABEL(wdt)),
+};
 
 static void watchdog_feed_worker(struct k_work *work_desc)
 {
@@ -102,9 +104,9 @@ static int watchdog_enable(struct wdt_data_storage *data)
 
 	int err = -ENXIO;
 
-	data->wdt_drv = device_get_binding(DT_LABEL(DT_NODELABEL(wdt)));
-	if (data->wdt_drv == NULL) {
-		LOG_ERR("Cannot bind watchdog driver");
+	__ASSERT_NO_MSG(data->wdt_drv == device_get_binding(DT_LABEL(DT_NODELABEL(wdt))));
+	if (!device_is_ready(data->wdt_drv)) {
+		LOG_ERR("Watchdog driver not ready");
 		return err;
 	}
 

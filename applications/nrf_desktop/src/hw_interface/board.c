@@ -21,15 +21,14 @@
 LOG_MODULE_REGISTER(MODULE, CONFIG_DESKTOP_BOARD_LOG_LEVEL);
 
 
-static int port_setup(const char *name,
+static int port_setup(const struct device *gpio_dev,
 		      const struct pin_state pin_state[],
 		      size_t cnt)
 {
-	const struct device *gpio_dev = device_get_binding(name);
 	int err = 0;
 
-	if (!gpio_dev) {
-		LOG_ERR("Cannot bind %s", name);
+	if (!device_is_ready(gpio_dev)) {
+		LOG_ERR("%s not ready", gpio_dev->name);
 		return -ENXIO;
 	}
 
@@ -42,8 +41,7 @@ static int port_setup(const char *name,
 					       pin_state[i].pin,
 					       pin_state[i].val);
 		} else {
-			LOG_ERR("Cannot configure pin %u on %s",
-				    pin_state[i].pin, name);
+			LOG_ERR("Cannot configure pin %u on %s", pin_state[i].pin, gpio_dev->name);
 			break;
 		}
 	}
@@ -56,7 +54,7 @@ static int ports_setup(const struct port_state port_state[], size_t cnt)
 	int err = 0;
 
 	for (size_t i = 0; i < cnt; i++) {
-		err = port_setup(port_state[i].name,
+		err = port_setup(port_state[i].dev,
 				 port_state[i].ps,
 				 port_state[i].ps_count);
 		if (err) {

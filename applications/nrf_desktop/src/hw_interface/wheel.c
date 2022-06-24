@@ -62,8 +62,8 @@ static const struct sensor_trigger qdec_trig = {
 	.chan = SENSOR_CHAN_ROTATION,
 };
 
-static const struct device *qdec_dev;
-static const struct device *gpio_dev;
+static const struct device *qdec_dev = DEVICE_DT_GET(DT_NODELABEL(qdec));
+static const struct device *gpio_dev = DEVICE_DT_GET(DT_NODELABEL(gpio0));
 static struct gpio_callback gpio_cbs[2];
 static struct k_spinlock lock;
 static struct k_work_delayable idle_timeout;
@@ -306,15 +306,15 @@ static int init(void)
 		k_work_init_delayable(&idle_timeout, idle_timeout_fn);
 	}
 
-	qdec_dev = device_get_binding(DT_LABEL(DT_NODELABEL(qdec)));
-	if (!qdec_dev) {
-		LOG_ERR("Cannot get QDEC device");
+	__ASSERT_NO_MSG(qdec_dev == device_get_binding(DT_LABEL(DT_NODELABEL(qdec))));
+	if (!device_is_ready(qdec_dev)) {
+		LOG_ERR("QDEC device not ready");
 		return -ENXIO;
 	}
 
-	gpio_dev = device_get_binding(DT_LABEL(DT_NODELABEL(gpio0)));
-	if (!gpio_dev) {
-		LOG_ERR("Cannot get GPIO device");
+	__ASSERT_NO_MSG(gpio_dev == device_get_binding(DT_LABEL(DT_NODELABEL(gpio0))));
+	if (!device_is_ready(gpio_dev)) {
+		LOG_ERR("GPIO device not ready");
 		return -ENXIO;
 	}
 
