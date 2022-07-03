@@ -14,7 +14,6 @@ zephyr_library_sources_ifdef(CONFIG_BT_FAST_PAIR_AUTH		   fp_auth.c)
 zephyr_library_sources_ifdef(CONFIG_BT_FAST_PAIR_GATT_SERVICE	   fp_gatt_service.c)
 zephyr_library_sources_ifdef(CONFIG_BT_FAST_PAIR_KEYS		   fp_keys.c)
 zephyr_library_sources_ifdef(CONFIG_BT_FAST_PAIR_REGISTRATION_DATA fp_registration_data.c)
-zephyr_library_sources_ifdef(CONFIG_BT_FAST_PAIR_STORAGE	   fp_storage.c)
 
 set(FP_PARTITION_NAME bt_fast_pair)
 
@@ -63,3 +62,6 @@ set_property(
 
 add_subdirectory(fp_crypto)
 target_link_libraries(fast_pair PRIVATE fp_crypto)
+
+add_subdirectory(fp_storage)
+target_link_libraries(fast_pair PRIVATE fp_storage)

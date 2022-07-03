@@ -17,7 +17,7 @@
 #include "fp_common.h"
 
 #include <zephyr/logging/log.h>
-LOG_MODULE_DECLARE(fast_pair, CONFIG_BT_FAST_PAIR_LOG_LEVEL);
+LOG_MODULE_REGISTER(fp_storage, CONFIG_FP_STORAGE_LOG_LEVEL);
 
 #define SUBTREE_NAME "fp"
 #define SETTINGS_AK_NAME_PREFIX "ak_data"
