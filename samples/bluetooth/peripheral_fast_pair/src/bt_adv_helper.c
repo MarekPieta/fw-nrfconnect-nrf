@@ -73,10 +73,8 @@ static K_WORK_DELAYABLE_DEFINE(rpa_rotate, rpa_rotate_fn);
 
 static void connected(struct bt_conn *conn, uint8_t err)
 {
-	struct k_work_sync sync;
-
 	if (!err) {
-		k_work_cancel_delayable_sync(&rpa_rotate, &sync);
+		(void)k_work_cancel_delayable(&rpa_rotate);
 	}
 }
 
@@ -191,7 +189,7 @@ static int adv_start_internal(enum bt_fast_pair_adv_mode fp_adv_mode)
 		}
 
 		__ASSERT_NO_MSG(rpa_timeout_ms <= RPA_TIMEOUT_FAST_PAIR_MAX * MSEC_PER_SEC);
-		k_work_schedule(&rpa_rotate, K_MSEC(rpa_timeout_ms));
+		(void)k_work_schedule(&rpa_rotate, K_MSEC(rpa_timeout_ms));
 	}
 
 	return err;
@@ -203,11 +201,18 @@ static void rpa_rotate_fn(struct k_work *w)
 	(void)adv_start_internal(adv_helper_fp_adv_mode);
 }
 
+static void assert_cooperative(void)
+{
+	__ASSERT_NO_MSG(!k_is_in_isr());
+	__ASSERT_NO_MSG(!k_is_preempt_thread());
+}
+
 int bt_adv_helper_adv_start(enum bt_fast_pair_adv_mode fp_adv_mode)
 {
-	struct k_work_sync sync;
+	/* Make sure that API is called from a cooperative thread. */
+	assert_cooperative();
 
-	k_work_cancel_delayable_sync(&rpa_rotate, &sync);
+	(void)k_work_cancel_delayable(&rpa_rotate);
 
 	adv_helper_fp_adv_mode = fp_adv_mode;
 
@@ -216,9 +221,10 @@ int bt_adv_helper_adv_start(enum bt_fast_pair_adv_mode fp_adv_mode)
 
 int bt_adv_helper_adv_stop(void)
 {
-	struct k_work_sync sync;
+	/* Make sure that API is called from a cooperative thread. */
+	assert_cooperative();
 
-	k_work_cancel_delayable_sync(&rpa_rotate, &sync);
+	(void)k_work_cancel_delayable(&rpa_rotate);
 
 	return bt_le_adv_stop();
 }
