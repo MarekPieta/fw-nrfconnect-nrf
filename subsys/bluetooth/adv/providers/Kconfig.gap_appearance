@@ -1,0 +1,19 @@
+#
+# Copyright (c) 2022 Nordic Semiconductor ASA
+#
+# SPDX-License-Identifier: LicenseRef-Nordic-5-Clause
+#
+
+menuconfig NRF_BT_ADV_PROV_GAP_APPEARANCE
+	bool "GAP appearance"
+	help
+	  Add GAP appearance to advertising data.
+
+if NRF_BT_ADV_PROV_GAP_APPEARANCE
+
+config NRF_BT_ADV_PROV_GAP_APPEARANCE_VAL
+	int "Advertised device appearance"
+	range 0 65535
+	default BT_DEVICE_APPEARANCE
+
+endif # NRF_BT_ADV_PROV_GAP_APPEARANCE

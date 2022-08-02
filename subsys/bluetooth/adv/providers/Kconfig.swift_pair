@@ -1,0 +1,21 @@
+#
+# Copyright (c) 2022 Nordic Semiconductor ASA
+#
+# SPDX-License-Identifier: LicenseRef-Nordic-5-Clause
+#
+
+config NRF_BT_ADV_PROV_SWIFT_PAIR
+	bool "Microsoft Swift Pair"
+	help
+	  Add Microsoft Swfit Pair manufacturer data to advertising data.
+
+if NRF_BT_ADV_PROV_SWIFT_PAIR
+
+config NRF_BT_ADV_PROV_SWIFT_PAIR_GRACE_PERIOD
+	int "Swift Pair grace period [s]"
+	default 30
+	help
+	  To ensure users will not try to connect to a device which is no longer available,
+	  Swift Pair vendor section will be removed before exiting from advertising mode.
+
+endif # NRF_BT_ADV_PROV_SWIFT_PAIR

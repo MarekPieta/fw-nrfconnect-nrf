@@ -18,4 +18,6 @@ module = NRF_BT_ADV
 module-str = nRF Bluetooth advertising module
 source "${ZEPHYR_BASE}/subsys/logging/Kconfig.template.log_config"
 
+rsource "providers/Kconfig"
+
 endif # NRF_BT_ADV
