@@ -5,6 +5,10 @@
 #
 target_sources(app PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/hwid.c)
 
+# Add list of UUID16 to advertising data.
+target_sources_ifdef(CONFIG_NRF_BT_ADV
+		      app PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/nrf_bt_adv_prov_uuid16.c)
+
 target_sources_ifdef(CONFIG_DESKTOP_CONFIG_CHANNEL_ENABLE app
 			PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/config_channel_transport.c)
 

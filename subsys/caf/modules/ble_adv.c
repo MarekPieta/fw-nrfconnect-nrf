@@ -11,6 +11,8 @@
 #include <zephyr/bluetooth/bluetooth.h>
 #include <zephyr/bluetooth/conn.h>
 
+#include <bluetooth/adv.h>
+
 #define MODULE ble_adv
 #include <caf/events/module_state_event.h>
 #include <caf/events/ble_common_event.h>
@@ -23,9 +25,6 @@ LOG_MODULE_REGISTER(MODULE, CONFIG_CAF_BLE_ADV_LOG_LEVEL);
 
 #define MAX_KEY_LEN 30
 #define PEER_IS_RPA_STORAGE_NAME "peer_is_rpa_"
-
-#include CONFIG_CAF_BLE_ADV_DEF_PATH
-
 
 enum state {
 	STATE_DISABLED,
@@ -174,6 +173,55 @@ static int ble_adv_start_directed(const bt_addr_le_t *addr, bool fast_adv)
 	return 0;
 }
 
+static int update_undirected_advertising(struct bt_le_adv_param *adv_param)
+{
+	struct bond_find_data bond_find_data = {
+		.peer_id = 0,
+		.peer_count = 0,
+	};
+
+	bt_addr_le_copy(&bond_find_data.peer_address, BT_ADDR_LE_ANY);
+	bt_foreach_bond(cur_identity, bond_find, &bond_find_data);
+
+	size_t ad_len = nrf_bt_adv_get_ad_prov_cnt();
+	size_t sd_len = nrf_bt_adv_get_sd_prov_cnt();
+	struct bt_data ad[ad_len];
+	struct bt_data sd[sd_len];
+
+	struct nrf_bt_adv_state state;
+	struct nrf_bt_adv_feedback fb;
+
+	memset(&fb, 0, sizeof(fb));
+
+	if (bt_addr_le_cmp(&bond_find_data.peer_address, BT_ADDR_LE_ANY)) {
+		state.bond_cnt = 1;
+	} else {
+		state.bond_cnt = 0;
+	}
+
+	state.in_grace_period = adv_swift_pair;
+
+	int err = nrf_bt_adv_get_ad(ad, &ad_len, &state, &fb);
+
+	if (err) {
+		LOG_ERR("Cannot get advertising data (err: %d)", err);
+		return err;
+	}
+
+	err = nrf_bt_adv_get_sd(sd, &sd_len, &state, &fb);
+	if (err) {
+		LOG_ERR("Cannot get scan response data (err: %d)", err);
+		return err;
+	}
+
+	/* Start advertising only if new advertising params are provided. */
+	if (adv_param) {
+		return bt_le_adv_start(adv_param, ad, ad_len, sd, sd_len);
+	} else {
+		return bt_le_adv_update_data(ad, ad_len, sd, sd_len);
+	}
+}
+
 static int ble_adv_start_undirected(const bt_addr_le_t *bond_addr,
 				    bool fast_adv)
 {
@@ -215,19 +263,11 @@ static int ble_adv_start_undirected(const bt_addr_le_t *bond_addr,
 
 	adv_param.id = cur_identity;
 
-	const struct bt_data *ad;
-	size_t ad_size;
-
-	if (bt_addr_le_cmp(bond_addr, BT_ADDR_LE_ANY)) {
-		ad = ad_bonded;
-		ad_size = ARRAY_SIZE(ad_bonded);
-	} else {
-		ad = ad_unbonded;
-		ad_size = ARRAY_SIZE(ad_unbonded);
+	if (!bt_addr_le_cmp(bond_addr, BT_ADDR_LE_ANY)) {
 		adv_swift_pair = IS_ENABLED(CONFIG_CAF_BLE_ADV_SWIFT_PAIR);
 	}
 
-	return bt_le_adv_start(&adv_param, ad, ad_size, sd, ARRAY_SIZE(sd));
+	return update_undirected_advertising(&adv_param);
 }
 
 static int ble_adv_start(bool can_fast_adv)
@@ -310,10 +350,7 @@ static void sp_grace_period_fn(struct k_work *work)
 
 static int remove_swift_pair_section(void)
 {
-	int err = bt_le_adv_update_data(ad_unbonded,
-					(ARRAY_SIZE(ad_unbonded) -
-					 SWIFT_PAIR_SECTION_SIZE),
-					sd, ARRAY_SIZE(sd));
+	int err = update_undirected_advertising(NULL);
 
 	if (!err) {
 		LOG_INF("Swift Pair section removed");
