@@ -6,6 +6,8 @@
 
 #include <zephyr/bluetooth/bluetooth.h>
 #include <zephyr/bluetooth/conn.h>
+/* Include definitions related to SMP IO capabilities. */
+#include <host/smp.h>
 
 #include <zephyr/logging/log.h>
 LOG_MODULE_DECLARE(fast_pair, CONFIG_BT_FAST_PAIR_LOG_LEVEL);
@@ -85,11 +87,11 @@ BT_CONN_CB_DEFINE(conn_callbacks) = {
 enum bt_security_err auth_pairing_accept(struct bt_conn *conn,
 					 const struct bt_conn_pairing_feat *const feat)
 {
-	/* While Fast Pair authentication module is handling the Bluetooth authentication callbacks,
-	 * peers that do not follow Fast Pair procedure should be rejected. Otherwise invalid
-	 * capabilities will be reported by the Fast Pair Provider.
-	 */
-	return is_conn_handled(conn) ? BT_SECURITY_ERR_SUCCESS : BT_SECURITY_ERR_UNSPECIFIED;
+	if (is_conn_handled(conn) && (feat->io_capability != BT_SMP_IO_NO_INPUT_OUTPUT)) {
+		return BT_SECURITY_ERR_SUCCESS;
+	} else {
+		return BT_SECURITY_ERR_UNSPECIFIED;
+	}
 }
 
 static void auth_passkey_display(struct bt_conn *conn, unsigned int passkey)
