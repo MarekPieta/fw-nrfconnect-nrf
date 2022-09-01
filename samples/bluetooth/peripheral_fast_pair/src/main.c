@@ -282,7 +282,9 @@ static void button_changed(uint32_t button_state, uint32_t has_changed)
 	__ASSERT_NO_MSG(!k_is_preempt_thread());
 
 	fp_adv_mode_btn_handle(button_state, has_changed);
-	volume_control_btn_handle(button_state, has_changed);
+	if (IS_ENABLED(CONFIG_BT_HIDS)) {
+		volume_control_btn_handle(button_state, has_changed);
+	}
 }
 
 void main(void)
@@ -301,10 +303,12 @@ void main(void)
 		return;
 	}
 
-	err = hids_helper_init();
-	if (err) {
-		LOG_ERR("HIDS init failed (err %d)", err);
-		return;
+	if (IS_ENABLED(CONFIG_BT_HIDS)) {
+		err = hids_helper_init();
+		if (err) {
+			LOG_ERR("HIDS init failed (err %d)", err);
+			return;
+		}
 	}
 
 	err = bt_enable(NULL);

@@ -48,9 +48,15 @@ BUILD_ASSERT(RPA_TIMEOUT_NON_DISCOVERABLE < CONFIG_BT_RPA_TIMEOUT);
 
 static struct bt_data ad[] = {
 	BT_DATA_BYTES(BT_DATA_FLAGS, (BT_LE_AD_GENERAL | BT_LE_AD_NO_BREDR)),
+#if defined(CONFIG_BT_BAS) || defined(CONFIG_BT_HIDS)
 	BT_DATA_BYTES(BT_DATA_UUID16_ALL,
+#if defined(CONFIG_BT_HIDS)
 		      BT_UUID_16_ENCODE(BT_UUID_HIDS_VAL),
+#endif /* defined(CONFIG_BT_HIDS) */
+#if defined(CONFIG_BT_BAS)
 		      BT_UUID_16_ENCODE(BT_UUID_BAS_VAL)),
+#endif /* defined(CONFIG_BT_BAS) */
+#endif /* defined(CONFIG_BT_BAS) || defined(CONFIG_BT_HIDS) */
 	/* Empty placeholder for TX power advertising data. */
 	{
 	},
