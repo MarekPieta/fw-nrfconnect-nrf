@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2020 Nordic Semiconductor ASA
+ * Copyright (c) 2018 Nordic Semiconductor ASA
  *
  * SPDX-License-Identifier: LicenseRef-Nordic-5-Clause
  */
@@ -19,8 +19,6 @@ const struct {} port_state_def_include_once;
 
 
 static const struct pin_state port0_on[] = {
-	{DT_GPIO_PIN(DT_ALIAS(led2), gpios), 1},
-	{DT_GPIO_PIN(DT_ALIAS(led3), gpios), 1}
 };
 
 static const struct pin_state port1_on[] = {
