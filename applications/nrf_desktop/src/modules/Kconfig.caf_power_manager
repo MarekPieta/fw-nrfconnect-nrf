@@ -1,0 +1,15 @@
+#
+# Copyright (c) 2022 Nordic Semiconductor ASA
+#
+# SPDX-License-Identifier: LicenseRef-Nordic-5-Clause
+#
+
+# nRF Desktop specific configuration overlay for CAF power manager module.
+
+config DESKTOP_POWER_MANAGER
+	bool
+	default y
+	select CAF_POWER_MANAGER
+	select CAF_PM_EVENTS
+	select PM_POLICY_CUSTOM
+	imply CAF_POWER_MANAGER_STAY_ON if DESKTOP_ROLE_HID_DONGLE
