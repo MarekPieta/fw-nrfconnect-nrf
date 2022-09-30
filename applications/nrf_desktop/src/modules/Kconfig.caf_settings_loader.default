@@ -4,6 +4,8 @@
 # SPDX-License-Identifier: LicenseRef-Nordic-5-Clause
 #
 
+# nRF Desktop specific configuration overlay for CAF settings loader module.
+
 config DESKTOP_SETTINGS
 	bool
 	default y
