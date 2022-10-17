@@ -16,10 +16,6 @@ static int get_data(struct bt_data *sd, const struct bt_le_adv_prov_adv_state *s
 {
 	ARG_UNUSED(fb);
 
-	if (!state->pairing_mode) {
-		return -ENOENT;
-	}
-
 	*sd = data;
 
 	return 0;
