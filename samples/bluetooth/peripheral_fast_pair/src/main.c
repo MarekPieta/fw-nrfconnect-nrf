@@ -34,6 +34,7 @@ LOG_MODULE_REGISTER(fp_sample, LOG_LEVEL_INF);
 #define FP_DISCOVERABLE_ADV_TIMEOUT_MINUTES			(10)
 
 static enum bt_fast_pair_adv_mode fp_adv_mode = BT_FAST_PAIR_ADV_MODE_DISCOVERABLE;
+static bool new_adv_session = true;
 static struct bt_conn *peer;
 
 static struct k_work bt_adv_restart;
@@ -42,7 +43,9 @@ static struct k_work_delayable fp_discoverable_adv_timeout;
 
 static void advertising_start(void)
 {
-	int err = bt_adv_helper_adv_start(fp_adv_mode);
+	int err = bt_adv_helper_adv_start(fp_adv_mode, new_adv_session);
+
+	new_adv_session = false;
 
 	int ret = k_work_cancel_delayable(&fp_discoverable_adv_timeout);
 
@@ -164,6 +167,8 @@ static void disconnected(struct bt_conn *conn, uint8_t reason)
 
 	__ASSERT_NO_MSG(ret == 1);
 	ARG_UNUSED(ret);
+
+	new_adv_session = true;
 }
 
 static void security_changed(struct bt_conn *conn, bt_security_t level, enum bt_security_err err)
@@ -269,6 +274,7 @@ static void fp_adv_mode_btn_handle(uint32_t button_state, uint32_t has_changed)
 	if (button_pressed & FP_ADV_MODE_BUTTON_MASK) {
 		fp_adv_mode = (fp_adv_mode + 1) % BT_FAST_PAIR_ADV_MODE_COUNT;
 		if (!peer) {
+			new_adv_session = true;
 			advertising_start();
 		}
 
