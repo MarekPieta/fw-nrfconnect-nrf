@@ -6,6 +6,7 @@
 
 #include <stdlib.h>
 #include <zephyr/types.h>
+#include <zephyr/random/rand32.h>
 #include <zephyr/settings/settings.h>
 
 #include <zephyr/bluetooth/bluetooth.h>
@@ -39,14 +40,17 @@ static enum state state;
 static size_t grace_period_s;
 static bool direct_adv;
 static bool fast_adv;
+static bool rpa_rotated;
 
 static size_t req_grace_period_s;
 static bool req_wakeup;
 static bool req_fast_adv = true;
+static bool req_new_adv_session = true;
 
 static struct k_work adv_delayed_start;
 static struct k_work_delayable fast_adv_end;
 static struct k_work_delayable grace_period_end;
+static struct k_work_delayable rpa_rotate;
 static uint8_t cur_identity = BT_ID_DEFAULT; /* We expect zero */
 
 enum peer_rpa {
@@ -168,6 +172,48 @@ static bool can_direct_adv(uint8_t local_id)
 	return ((bond_cnt(local_id) == 1) && (peer_is_rpa[local_id] != PEER_RPA_YES));
 }
 
+static void reschedule_rpa_rotation(void)
+{
+#if CONFIG_CAF_BLE_ADV_ROTATE_RPA
+	BUILD_ASSERT((CONFIG_CAF_BLE_ADV_ROTATE_RPA_TIMEOUT +
+		      CONFIG_CAF_BLE_ADV_ROTATE_RPA_TIMEOUT_RAND) < CONFIG_BT_RPA_TIMEOUT);
+#endif
+	if (!IS_ENABLED(CONFIG_CAF_BLE_ADV_ROTATE_RPA)) {
+		return;
+	}
+
+	unsigned int rpa_timeout_ms = CONFIG_CAF_BLE_ADV_ROTATE_RPA_TIMEOUT * MSEC_PER_SEC;
+	int8_t rand;
+	int err = sys_csrand_get(&rand, sizeof(rand));
+
+	if (!err) {
+		rpa_timeout_ms +=
+			((int)(CONFIG_CAF_BLE_ADV_ROTATE_RPA_TIMEOUT_RAND * MSEC_PER_SEC)) *
+			rand / INT8_MAX;
+	} else {
+		LOG_WRN("Cannot get random RPA timeout (err: %d). Used fixed value", err);
+	}
+
+	(void)k_work_reschedule(&rpa_rotate, K_MSEC(rpa_timeout_ms));
+}
+
+static void force_rpa_rotation(uint8_t local_id)
+{
+	if (!IS_ENABLED(CONFIG_CAF_BLE_ADV_ROTATE_RPA)) {
+		return;
+	}
+
+	struct bt_le_oob oob;
+	int err = bt_le_oob_get_local(local_id, &oob);
+
+	if (err) {
+		LOG_ERR("Cannot trigger RPA rotation on ID: %" PRIu8 " (err: %d)", local_id, err);
+	} else {
+		LOG_INF("RPA rotated on ID: %" PRIu8, local_id);
+		rpa_rotated = true;
+	}
+}
+
 static int ble_adv_start_directed(void)
 {
 	bt_addr_le_t addr;
@@ -216,6 +262,8 @@ static int update_undirected_advertising(struct bt_le_adv_param *adv_param)
 
 	adv_state.pairing_mode = (bond_cnt(cur_identity) == 0);
 	adv_state.in_grace_period = (state == STATE_GRACE_PERIOD);
+	adv_state.new_adv_session = req_new_adv_session;
+	adv_state.rpa_rotated = rpa_rotated;
 	req_grace_period_s = 0;
 
 	int err = bt_le_adv_prov_get_ad(ad, &ad_len, &adv_state, &fb);
@@ -240,9 +288,17 @@ static int update_undirected_advertising(struct bt_le_adv_param *adv_param)
 				!IS_ENABLED(CONFIG_CAF_BLE_ADV_PM_EVENTS));
 	}
 
+	if (rpa_rotated) {
+		rpa_rotated = false;
+		reschedule_rpa_rotation();
+	}
+
 	if (adv_param) {
 		return bt_le_adv_start(adv_param, ad, ad_len, sd, sd_len);
 	} else {
+		__ASSERT_NO_MSG(!adv_state.req_new_adv_session);
+		__ASSERT_NO_MSG(!adv_state.rpa_rotated);
+
 		return bt_le_adv_update_data(ad, ad_len, sd, sd_len);
 	}
 }
@@ -315,6 +371,12 @@ static int ble_adv_start_undirected(void)
 		adv_param.options |= BT_LE_ADV_OPT_FILTER_CONN;
 	}
 
+	if (req_new_adv_session) {
+		force_rpa_rotation(cur_identity);
+	}
+
+	adv_param.id = cur_identity;
+
 	return update_undirected_advertising(&adv_param);
 }
 
@@ -378,6 +440,8 @@ static void ble_adv_data_update(void)
 	} else if (err) {
 		update_state(STATE_ERROR);
 	}
+
+	return err;
 }
 
 static void ble_adv_stop(void)
@@ -440,6 +504,40 @@ static void broadcast_module_state(enum state prev_state, enum state new_state)
 	if (req_wakeup) {
 		APP_EVENT_SUBMIT(new_wake_up_event());
 		req_wakeup = false;
+	}
+}
+
+static void rpa_rotate_fn(struct k_work *work)
+{
+	ARG_UNUSED(work);
+
+	if (IS_ENABLED(CONFIG_CAF_BLE_ADV_GRACE_PERIOD) && (state == STATE_GRACE_PERIOD)) {
+		(void)k_work_cancel_delayable(&grace_period_end);
+		grace_period_fn(NULL);
+		return;
+	}
+
+	if ((state == STATE_DELAYED_ACTIVE_FAST) || (state == STATE_DELAYED_ACTIVE_SLOW)) {
+		/* Cannot start advertising now. New advertising session will be started soon. */
+		__ASSERT_NO_MSG(new_adv_session);
+		return;
+	}
+
+	__ASSERT_NO_MSG((state == STATE_ACTIVE_FAST) || (state == STATE_ACTIVE_SLOW));
+
+	int err = bt_le_adv_stop();
+
+	if (!err) {
+		__ASSERT_NO_MSG(!new_adv_session);
+		force_rpa_rotation(cur_identity);
+	}
+
+	if (!err) {
+		err = ble_adv_start((state == STATE_ACTIVE_FAST));
+	}
+
+	if (err) {
+		module_set_state(MODULE_STATE_ERROR);
 	}
 }
 
@@ -609,6 +707,10 @@ static void init(void)
 		k_work_init_delayable(&fast_adv_end, fast_adv_end_fn);
 	}
 
+	if (IS_ENABLED(CONFIG_CAF_BLE_ADV_ROTATE_RPA)) {
+		k_work_init_delayable(&rpa_rotate, rpa_rotate_fn);
+	}
+
 	if (IS_ENABLED(CONFIG_CAF_BLE_ADV_GRACE_PERIOD)) {
 		k_work_init_delayable(&grace_period_end, grace_period_end_fn);
 	}
@@ -750,6 +852,7 @@ static bool handle_ble_peer_event(const struct ble_peer_event *event)
 		break;
 
 	case PEER_STATE_DISCONNECTED:
+		req_new_adv_session = true;
 		req_fast_adv = true;
 		update_state(STATE_DELAYED_ACTIVE);
 		break;
@@ -802,6 +905,7 @@ static bool handle_ble_peer_operation_event(const struct ble_peer_operation_even
 			req_wakeup = true;
 		}
 		req_fast_adv = true;
+		req_new_adv_session = true;
 
 		/* Advertising must be stopped while getting the connection object. */
 		int err = bt_le_adv_stop();
@@ -886,6 +990,7 @@ static bool handle_wake_up_event(const struct wake_up_event *event)
 	switch (state) {
 	case STATE_OFF:
 	case STATE_GRACE_PERIOD:
+		req_new_adv_session = true;
 		req_fast_adv = true;
 		update_state(STATE_ACTIVE);
 		break;
