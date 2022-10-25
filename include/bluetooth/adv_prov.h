@@ -35,6 +35,17 @@ struct bt_le_adv_prov_adv_state {
 	 * The boolean informs about advertising in grace period.
 	 */
 	bool in_grace_period;
+
+	/** Information if RPA (Resolvable Private Address) was rotated. Advertising data that is
+	 * generated relying on a random value should be re-generated together with RPA rotation
+	 * to prevent compromising privacy.
+	 */
+	bool rpa_rotated;
+
+	/** Information if new advertising session is started. If set to false, the previously
+	 * started advertising session is continued.
+	 */
+	bool new_adv_session;
 };
 
 /** Structure describing feedback reported by advertising providers. */
