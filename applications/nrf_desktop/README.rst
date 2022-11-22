@@ -931,6 +931,46 @@ You must modify these configuration sources when `Adding a new board`_, as descr
 For information about differences between DTS and Kconfig, see :ref:`zephyr:dt_vs_kconfig`.
 For detailed instructions for adding Zephyr support to a custom board, see Zephyr's :ref:`zephyr:board_porting_guide`.
 
+Application-specific Kconfig configuration
+==========================================
+
+The nRF Desktop introduces Kconfig options that can be used to simplify application configuration.
+These options can be used to select device role and automatically apply some default configuration suitable for the selected role.
+
+HID configuration
+-----------------
+
+The nRF Desktop application introduces application-specific configuration options related to HID device configuration.
+These options are defined in :file:`Kconfig.hid`.
+
+The options define the nRF Desktop device role.
+The device role may be either HID dongle or HID peripheral.
+Each role automatically selects nRF Desktop modules needed for the role.
+For example, :ref:`nrf_desktop_hid_state` is automatically enabled for the HID peripheral role.
+
+Apart from device role, the application-specific Kconfigs spercify peripheral type (HID mouse, HID keyboard or other HID device), set of supported HID reports and supported HID boot report.
+By default, the nRF Desktop devices use predefined format of HID reports.
+The common HID report map is defined in the :file:`configuration/common/hid_report_desc.c` file.
+
+Kconfig defaults
+----------------
+
+The nRF Desktop application overlays Kconfig defaults to align the default Kconfig option values with the nRF Desktop use-case.
+The application overlays Kconfig defaults in the following files:
+
+* :file:`Kconfig.defaults`
+  The file introduces configuration overlays common for nRF Desktop application.
+  The file enables among others :ref:`event_manager`, :ref:`lib_caf`, :ref:`caf_settings_loader` and :ref:`caf_power_manager`.
+* :file:`Kconfig.ble`
+  The file introduces configuration overlays related to Bluetooth LE connectivity.
+  The file aligns default Bluetooth configuration values and enables modules needed for the selected nRF Desktop role.
+
+See file contents for details related to Kconfig options.
+
+Apart from that, the application introduces overlays specific to :ref:`lib_caf` modules.
+These overlays are located in :file:`src/modules` directory, the files are named :file:`Kconfig.caf_module_name.default`.
+For example, the configuration overlays for :ref:`caf_settings_loader_module` are introduced in :file:`src/modules/Kconfig.caf_settings_loader.default`.
+
 .. _nrf_desktop_board_configuration:
 
 Board configuration

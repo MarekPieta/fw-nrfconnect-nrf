@@ -190,6 +190,9 @@ nRF Desktop
 -----------
 
 * The UUID16 values of GATT Human Interface Device Service (HIDS) and GATT Battery Service (BAS) are moved from advertising data to scan response data.
+* The Bluetooth GATT Service Changed (:kconfig:option:`CONFIG_BT_GATT_SERVICE_CHANGED`) is disabled on nRF Desktop dongles to reduce memory footprint.
+* Part of application Kconfig configuration that is common for HID use-case is introduced as overlays for default Kconfig values.
+  See :ref:`nrf_desktop_porting_guide` for details.
 
 Thingy:53 Zigbee weather station
 --------------------------------
