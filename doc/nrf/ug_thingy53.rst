@@ -20,7 +20,7 @@ The :ref:`nRF Connect SDK <index>` provides support for developing applications 
 Connecting to Thingy:53
 ***********************
 
-Applications and samples for the Nordic Thingy:53 use a serial terminal to provide logs.
+:ref:`thingy53_compatible_applications` use a serial terminal to provide logs.
 By default, the serial terminal is accessible through the USB CDC ACM class handled by application firmware.
 The serial port is visible right after the Thingy:53 is connected to the host using a USB cable.
 The CDC ACM baudrate is ignored, and transfer goes with USB speed.
@@ -55,15 +55,22 @@ The build targets of interest for Thingy:53 in the |NCS| are listed in the follo
 | nRF5340 SoC - Network core     |``thingy53_nrf5340_cpunet``                                                                                                       |
 +--------------------------------+----------------------------------------------------------------------------------------------------------------------------------+
 
-.. note::
-   The |NCS| samples and applications that are compatible with the Nordic Thingy:53 follow the :ref:`thingy53_app_guide`.
-   The application guide defines a consistent partition map and bootloader configuration to allow serial and OTA firmware updates.
+If you build a sample or application for Thingy:53 in the |NCS|, the default partition map defined fot Thingy:53 board is used by default.
+The MCUboot bootloader in the same configuration as the proprogrammed one is also included automatically.
+Thanks to that, samples are compatible with the preprogrammed MCUboot bootloader and they can be programmed using serial recovery (without using an external programmer).
 
-The |NCS| by default uses :ref:`ug_multi_image` for Thingy:53.
-Because of this, when you choose ``thingy53_nrf5340_cpuapp`` or ``thingy53_nrf5340_cpuapp_ns`` as the build target when building a sample or application that is compatible with Thingy:53, you will generate firmware for both the application core and network core:
+.. note::
+   The :ref:`thingy53_compatible_applications` also enable other features specified by the :ref:`thingy53_app_guide`.
+   Application logs are provided over USB CDC ACM and SMP FOTA DFU is supported.
+
+Because of this, when you choose ``thingy53_nrf5340_cpuapp`` or ``thingy53_nrf5340_cpuapp_ns`` as the build target when building a sample or application, you will generate firmware for both the application core and network core:
 
 * The application core firmware consists of MCUboot bootloader and an application image.
 * The network core firmware consists of network core bootloader (B0n) and application firmware of the network core.
+
+.. note::
+   If built application does not use network core, empty network core application firmware is used.
+   This is required to build MCUboot bootloader with the nRF53 mult image support.
 
 The build process generates firmware in two formats:
 
@@ -76,7 +83,7 @@ The build process generates firmware in two formats:
 For more information about files generated as output of the build process, see :ref:`app_build_output_files`.
 
 See the following sections for details regarding building and programming the firmware for Thingy:53 in various environments.
-If your Thingy:53 is already programmed with a Thingy:53-compatible sample or application, you can also use the MCUboot bootloader to update the firmware after you finish building.
+You can also use the MCUboot bootloader to update the firmware after you finish building.
 See :ref:`thingy53_app_update` for more detailed information about updating firmware on Thingy:53.
 
 .. _thingy53_build_pgm_vscode:
