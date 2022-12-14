@@ -135,6 +135,13 @@ nRF5340 Audio
 
   * Power module has been re-factored so that it uses upstream Zephyr INA23X sensor driver.
 
+nRF Desktop
+-----------
+
+* Set max compiled-in log level for NVS (:kconfig:option:`CONFIG_NVS_LOG_LEVEL`) to warning.
+  Lowered log level for ``Identity x created`` log in :ref:`nrf_desktop_ble_bond` to debug.
+  The changes were done to avoid flooding logs.
+
 Samples
 =======
 
