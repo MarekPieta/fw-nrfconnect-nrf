@@ -33,6 +33,9 @@ The module controls LEDs defined by enumerators in :c:enum:`led_id`:
 
 For the complete description of peer management, see :ref:`nrf_desktop_ble_bond`.
 
+.. note::
+   If a configuration does not support Bluetooth (:kconfig:option:`CONFIG_CAF_BLE_COMMON_EVENTS` is disabled), the LED is set only once during boot and LED effect represents :c:enumerator:`LED_PEER_STATE_DISCONNECTED` for the default peer.
+
 Module events
 *************
 
