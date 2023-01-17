@@ -17,6 +17,8 @@
 #include <zephyr/bluetooth/conn.h>
 #include <zephyr/bluetooth/hci.h>
 
+#include <nrf_profiler.h>
+
 #include "sdc_hci_vs.h"
 
 #include "chmap_filter.h"
@@ -93,6 +95,10 @@ static atomic_t params_updated;
 static struct chmap_filter_params filter_params;
 static struct k_mutex data_access_mutex;
 
+static uint16_t ble_crc_err_id;
+static uint16_t ble_crc_nak_id;
+static uint16_t ble_crc_to_id;
+
 BUILD_ASSERT(sizeof(struct bt_hci_cp_le_set_host_chan_classif) ==
 	     sizeof(struct params_chmap));
 BUILD_ASSERT(sizeof(current_chmap) == sizeof(struct params_chmap));
@@ -120,6 +126,14 @@ static const char * const opt_descr[] = {
 	[BLE_QOS_OPT_PARAM_WIFI] = "param_wifi"
 };
 
+
+void profile_crc(uint16_t evt_id)
+{
+	struct log_event_buf buf;
+
+	nrf_profiler_log_start(&buf);
+	nrf_profiler_log_send(&buf, evt_id);
+}
 
 static void update_blacklist(const uint8_t *blacklist)
 {
@@ -424,6 +438,15 @@ static bool on_vs_evt(struct net_buf_simple *buf)
 			evt->channel_index,
 			evt->crc_ok_count,
 			evt->crc_error_count);
+		for (size_t i = 0; i < evt->crc_error_count; i++) {
+			profile_crc(ble_crc_err_id);
+		}
+		for (size_t i = 0; i < evt->nak_count; i++) {
+			profile_crc(ble_crc_nak_id);
+		}
+		if (evt->rx_timeout) {
+			profile_crc(ble_crc_to_id);
+		}
 		return true;
 	default:
 		return false;
@@ -663,6 +686,10 @@ static bool app_event_handler(const struct app_event_header *aeh)
 			    MODULE_STATE_READY)) {
 			static bool initialized;
 			int err;
+
+			ble_crc_err_id = nrf_profiler_register_event_type("ble_crc_err", NULL, NULL, 0);
+			ble_crc_nak_id = nrf_profiler_register_event_type("ble_crc_nak", NULL, NULL, 0);
+			ble_crc_to_id = nrf_profiler_register_event_type("ble_crc_to", NULL, NULL, 0);
 
 			__ASSERT_NO_MSG(!initialized);
 
