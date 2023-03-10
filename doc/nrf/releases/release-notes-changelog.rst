@@ -246,7 +246,9 @@ Binary libraries
 Bluetooth libraries and services
 --------------------------------
 
-|no_changes_yet_note|
+* :ref:`bt_le_adv_prov_readme` library:
+
+  * Added API to enable or disable the Swift Pair provider (:c:func:`bt_le_adv_prov_swift_pair_enable`).
 
 Bootloader libraries
 --------------------
