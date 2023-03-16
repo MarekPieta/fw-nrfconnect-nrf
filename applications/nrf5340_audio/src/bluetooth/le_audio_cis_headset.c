@@ -14,7 +14,6 @@
 #include <zephyr/bluetooth/audio/pacs.h>
 #include <zephyr/bluetooth/audio/csip.h>
 #include <zephyr/bluetooth/audio/cap.h>
-#include <../subsys/bluetooth/audio/endpoint.h>
 
 #include "macros_common.h"
 #include "ctrl_events.h"
@@ -45,7 +44,7 @@ LISTIFY(CONFIG_BT_ASCS_ASE_SRC_COUNT, NET_BUF_POOL_ITERATE, (;))
 static atomic_t iso_tx_pool_alloc;
 /* clang-format off */
 static struct net_buf_pool *iso_tx_pools[] = { LISTIFY(CONFIG_BT_ASCS_ASE_SRC_COUNT,
-						       NET_BUF_POOL_PTR_ITERATE, (,)) };
+							   NET_BUF_POOL_PTR_ITERATE, (,)) };
 /* clang-format on */
 #endif /* CONFIG_STREAM_BIDIRECTIONAL */
 
@@ -88,7 +87,7 @@ struct bt_csip_set_member_register_param csip_param = {
 #if !CONFIG_BT_CSIP_SET_MEMBER_TEST_SAMPLE_DATA
 	/* CSIP SIRK for demo is used, must be changed before production */
 	.set_sirk = { 'N', 'R', 'F', '5', '3', '4', '0', '_', 'T', 'W', 'S', '_', 'D', 'E', 'M',
-		      'O' },
+			  'O' },
 #else
 #warning "CSIP test sample data is used, must be changed before production"
 #endif
@@ -115,11 +114,11 @@ static const struct bt_codec_qos_pref qos_pref =
 /* clang-format off */
 static struct bt_pacs_cap caps[] = {
 				{
-				     .codec = &lc3_codec,
+					 .codec = &lc3_codec,
 				},
 #if CONFIG_STREAM_BIDIRECTIONAL
 				{
-				     .codec = &lc3_codec,
+					 .codec = &lc3_codec,
 				}
 #endif /* CONFIG_STREAM_BIDIRECTIONAL */
 };
@@ -127,14 +126,14 @@ static struct bt_pacs_cap caps[] = {
 
 static struct k_work adv_work;
 static struct bt_conn *default_conn;
-static struct bt_audio_stream
+static struct bt_bap_stream
 	audio_streams[CONFIG_BT_ASCS_ASE_SNK_COUNT + CONFIG_BT_ASCS_ASE_SRC_COUNT];
 
 #if CONFIG_STREAM_BIDIRECTIONAL
 BUILD_ASSERT(CONFIG_BT_ASCS_ASE_SRC_COUNT <= 1,
-	     "CIS headset only supports one source stream for now");
+		 "CIS headset only supports one source stream for now");
 static struct bt_audio_source {
-	struct bt_audio_stream *stream;
+	struct bt_bap_stream *stream;
 	uint32_t seq_num;
 } sources[CONFIG_BT_ASCS_ASE_SRC_COUNT];
 #endif /* CONFIG_STREAM_BIDIRECTIONAL */
@@ -263,14 +262,14 @@ static void advertising_start(void)
 	k_work_submit(&adv_work);
 }
 
-static int lc3_config_cb(struct bt_conn *conn, const struct bt_audio_ep *ep, enum bt_audio_dir dir,
-			 const struct bt_codec *codec, struct bt_audio_stream **stream,
+static int lc3_config_cb(struct bt_conn *conn, const struct bt_bap_ep *ep, enum bt_audio_dir dir,
+			 const struct bt_codec *codec, struct bt_bap_stream **stream,
 			 struct bt_codec_qos_pref *const pref)
 {
 	int ret;
 
 	for (int i = 0; i < ARRAY_SIZE(audio_streams); i++) {
-		struct bt_audio_stream *audio_stream = &audio_streams[i];
+		struct bt_bap_stream *audio_stream = &audio_streams[i];
 
 		if (!audio_stream->conn) {
 			LOG_DBG("ASE Codec Config stream %p", (void *)audio_stream);
@@ -316,7 +315,7 @@ static int lc3_config_cb(struct bt_conn *conn, const struct bt_audio_ep *ep, enu
 	return -ENOMEM;
 }
 
-static int lc3_reconfig_cb(struct bt_audio_stream *stream, enum bt_audio_dir dir,
+static int lc3_reconfig_cb(struct bt_bap_stream *stream, enum bt_audio_dir dir,
 			   const struct bt_codec *codec, struct bt_codec_qos_pref *const pref)
 {
 	LOG_DBG("ASE Codec Reconfig: stream %p", (void *)stream);
@@ -324,7 +323,7 @@ static int lc3_reconfig_cb(struct bt_audio_stream *stream, enum bt_audio_dir dir
 	return 0;
 }
 
-static int lc3_qos_cb(struct bt_audio_stream *stream, const struct bt_codec_qos *qos)
+static int lc3_qos_cb(struct bt_bap_stream *stream, const struct bt_codec_qos *qos)
 {
 	int ret;
 
@@ -335,7 +334,7 @@ static int lc3_qos_cb(struct bt_audio_stream *stream, const struct bt_codec_qos 
 	return ret;
 }
 
-static int lc3_enable_cb(struct bt_audio_stream *stream, const struct bt_codec_data *meta,
+static int lc3_enable_cb(struct bt_bap_stream *stream, const struct bt_codec_data *meta,
 			 size_t meta_count)
 {
 	int ret;
@@ -358,20 +357,20 @@ static int lc3_enable_cb(struct bt_audio_stream *stream, const struct bt_codec_d
 	return 0;
 }
 
-static int lc3_start_cb(struct bt_audio_stream *stream)
+static int lc3_start_cb(struct bt_bap_stream *stream)
 {
 	LOG_DBG("Stream started %p", (void *)stream);
 	return 0;
 }
 
-static int lc3_metadata_cb(struct bt_audio_stream *stream, const struct bt_codec_data *meta,
+static int lc3_metadata_cb(struct bt_bap_stream *stream, const struct bt_codec_data *meta,
 			   size_t meta_count)
 {
 	LOG_DBG("Metadata: stream %p meta_count %d", (void *)stream, meta_count);
 	return 0;
 }
 
-static int lc3_disable_cb(struct bt_audio_stream *stream)
+static int lc3_disable_cb(struct bt_bap_stream *stream)
 {
 	int ret;
 
@@ -383,7 +382,7 @@ static int lc3_disable_cb(struct bt_audio_stream *stream)
 	return 0;
 }
 
-static int lc3_stop_cb(struct bt_audio_stream *stream)
+static int lc3_stop_cb(struct bt_bap_stream *stream)
 {
 	int ret;
 
@@ -395,7 +394,7 @@ static int lc3_stop_cb(struct bt_audio_stream *stream)
 	return 0;
 }
 
-static int lc3_release_cb(struct bt_audio_stream *stream)
+static int lc3_release_cb(struct bt_bap_stream *stream)
 {
 	int ret;
 
@@ -407,7 +406,7 @@ static int lc3_release_cb(struct bt_audio_stream *stream)
 	return 0;
 }
 
-static const struct bt_audio_unicast_server_cb unicast_server_cb = {
+static const struct bt_bap_unicast_server_cb unicast_server_cb = {
 	.config = lc3_config_cb,
 	.reconfig = lc3_reconfig_cb,
 	.qos = lc3_qos_cb,
@@ -419,14 +418,14 @@ static const struct bt_audio_unicast_server_cb unicast_server_cb = {
 	.release = lc3_release_cb,
 };
 
-static void stream_sent_cb(struct bt_audio_stream *stream)
+static void stream_sent_cb(struct bt_bap_stream *stream)
 {
 #if CONFIG_STREAM_BIDIRECTIONAL
 	atomic_dec(&iso_tx_pool_alloc);
 #endif /* CONFIG_STREAM_BIDIRECTIONAL */
 }
 
-static void stream_recv_cb(struct bt_audio_stream *stream, const struct bt_iso_recv_info *info,
+static void stream_recv_cb(struct bt_bap_stream *stream, const struct bt_iso_recv_info *info,
 			   struct net_buf *buf)
 {
 	static uint32_t recv_cnt;
@@ -449,16 +448,33 @@ static void stream_recv_cb(struct bt_audio_stream *stream, const struct bt_iso_r
 	}
 }
 
-static void stream_start_cb(struct bt_audio_stream *stream)
+static void stream_start_cb(struct bt_bap_stream *stream)
 {
 	LOG_INF("Stream started");
 }
 
-static void stream_stop_cb(struct bt_audio_stream *stream)
+static void stream_enabled_cb(struct bt_bap_stream *stream)
+{
+	LOG_INF("Stream enabled");
+	int ret;
+
+	if (stream->dir == BT_AUDIO_DIR_SINK) {
+		/* Automatically do the receiver start ready operation */
+		ret = bt_bap_stream_start(stream);
+		if (ret != 0) {
+			LOG_ERR("Failed to start stream: %d", ret);
+			return;
+		}
+	}
+}
+
+/* TODO: Add all callbacks */
+
+static void stream_stop_cb(struct bt_bap_stream *stream, uint8_t reason)
 {
 	int ret;
 
-	LOG_INF("Stream stopped");
+	LOG_INF("Stream stopped. Reason: %d", reason);
 #if CONFIG_STREAM_BIDIRECTIONAL
 	atomic_clear(&iso_tx_pool_alloc);
 #endif /* CONFIG_STREAM_BIDIRECTIONAL */
@@ -544,8 +560,9 @@ static struct bt_conn_cb conn_callbacks = {
 	.security_changed = security_changed_cb,
 };
 
-static struct bt_audio_stream_ops stream_ops = { .recv = stream_recv_cb,
+static struct bt_bap_stream_ops stream_ops = { .recv = stream_recv_cb,
 						 .sent = stream_sent_cb,
+						 .enabled = stream_enabled_cb,
 						 .started = stream_start_cb,
 						 .stopped = stream_stop_cb };
 
@@ -555,7 +572,7 @@ static int initialize(le_audio_receive_cb recv_cb)
 	static bool initialized;
 
 	if (!initialized) {
-		bt_audio_unicast_server_register_cb(&unicast_server_cb);
+		bt_bap_unicast_server_register_cb(&unicast_server_cb);
 		bt_conn_cb_register(&conn_callbacks);
 #if (CONFIG_BT_VCP_VOL_REND)
 		ret = ble_vcs_server_init();
@@ -604,21 +621,41 @@ static int initialize(le_audio_receive_cb recv_cb)
 			return -ECANCELED;
 		}
 #if CONFIG_STREAM_BIDIRECTIONAL
-		ret = bt_pacs_set_available_contexts(BT_AUDIO_DIR_SINK,
-						     BT_AUDIO_CONTEXT_TYPE_MEDIA |
-							     BT_AUDIO_CONTEXT_TYPE_CONVERSATIONAL |
-							     BT_AUDIO_CONTEXT_TYPE_UNSPECIFIED);
+		ret = bt_pacs_set_supported_contexts(BT_AUDIO_DIR_SINK,
+				BT_AUDIO_CONTEXT_TYPE_MEDIA |
+				BT_AUDIO_CONTEXT_TYPE_CONVERSATIONAL |
+				BT_AUDIO_CONTEXT_TYPE_UNSPECIFIED);
+
 		if (ret) {
-			LOG_ERR("Available context set failed");
+			LOG_ERR("Supported context set failed. Err: %d", ret);
+			return ret;
+		}
+
+		ret = bt_pacs_set_available_contexts(BT_AUDIO_DIR_SINK,
+				BT_AUDIO_CONTEXT_TYPE_MEDIA |
+				BT_AUDIO_CONTEXT_TYPE_CONVERSATIONAL |
+				BT_AUDIO_CONTEXT_TYPE_UNSPECIFIED);
+		if (ret) {
+			LOG_ERR("Available context set failed. Err%d: %d", ret);
+			return ret;
+		}
+
+		ret = bt_pacs_set_supported_contexts(BT_AUDIO_DIR_SOURCE,
+				BT_AUDIO_CONTEXT_TYPE_MEDIA |
+				BT_AUDIO_CONTEXT_TYPE_CONVERSATIONAL |
+				BT_AUDIO_CONTEXT_TYPE_UNSPECIFIED);
+
+		if (ret) {
+			LOG_ERR("Supported context set failed. Err: %d", ret);
 			return ret;
 		}
 
 		ret = bt_pacs_set_available_contexts(BT_AUDIO_DIR_SOURCE,
-						     BT_AUDIO_CONTEXT_TYPE_MEDIA |
-							     BT_AUDIO_CONTEXT_TYPE_CONVERSATIONAL |
-							     BT_AUDIO_CONTEXT_TYPE_UNSPECIFIED);
+				BT_AUDIO_CONTEXT_TYPE_MEDIA |
+				BT_AUDIO_CONTEXT_TYPE_CONVERSATIONAL |
+				BT_AUDIO_CONTEXT_TYPE_UNSPECIFIED);
 		if (ret) {
-			LOG_ERR("Available context set failed");
+			LOG_ERR("Available context set failed. Err: %d", ret);
 			return ret;
 		}
 
@@ -641,16 +678,26 @@ static int initialize(le_audio_receive_cb recv_cb)
 			return -ECANCELED;
 		}
 #else
-		ret = bt_pacs_set_available_contexts(BT_AUDIO_DIR_SINK,
-						     BT_AUDIO_CONTEXT_TYPE_MEDIA |
-							     BT_AUDIO_CONTEXT_TYPE_UNSPECIFIED);
+
+		ret = bt_pacs_set_supported_contexts(BT_AUDIO_DIR_SINK,
+				BT_AUDIO_CONTEXT_TYPE_MEDIA |
+				BT_AUDIO_CONTEXT_TYPE_UNSPECIFIED);
+
 		if (ret) {
-			LOG_ERR("Available context set failed");
+			LOG_ERR("Supported context set failed. Err: %d ", ret);
+			return ret;
+		}
+
+		ret = bt_pacs_set_available_contexts(BT_AUDIO_DIR_SINK,
+				BT_AUDIO_CONTEXT_TYPE_MEDIA |
+				BT_AUDIO_CONTEXT_TYPE_UNSPECIFIED);
+		if (ret) {
+			LOG_ERR("Available context set failed. Err: %d", ret);
 			return ret;
 		}
 #endif /* CONFIG_STREAM_BIDIRECTIONAL */
 		for (int i = 0; i < ARRAY_SIZE(audio_streams); i++) {
-			bt_audio_stream_cb_register(&audio_streams[i], &stream_ops);
+			bt_bap_stream_cb_register(&audio_streams[i], &stream_ops);
 		}
 
 		ret = bt_cap_acceptor_register(&csip_param, &csip);
@@ -757,7 +804,7 @@ int le_audio_send(struct encoded_audio enc_audio)
 	}
 
 	/* CIS headset only supports one source stream for now */
-	if (sources[0].stream->ep->status.state != BT_AUDIO_EP_STATE_STREAMING) {
+	if (sources[0].stream->ep->status.state != BT_BAP_EP_STATE_STREAMING) {
 		LOG_DBG("Return channel not connected");
 		return 0;
 	}
@@ -792,7 +839,7 @@ int le_audio_send(struct encoded_audio enc_audio)
 	net_buf_add_mem(buf, enc_audio.data, enc_audio.size);
 
 	atomic_inc(&iso_tx_pool_alloc);
-	ret = bt_audio_stream_send(sources[0].stream, buf, sources[0].seq_num++,
+	ret = bt_bap_stream_send(sources[0].stream, buf, sources[0].seq_num++,
 				   BT_ISO_TIMESTAMP_NONE);
 	if (ret < 0) {
 		LOG_WRN("Failed to send audio data: %d", ret);
