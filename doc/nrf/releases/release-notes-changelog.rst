@@ -294,7 +294,7 @@ Wi-Fi samples
 Other samples
 -------------
 
-|no_changes_yet_note|
+* Updated the machine learning model (:kconfig:option:`CONFIG_EDGE_IMPULSE_URI`) used by the :ref:`ei_wrapper_sample` sample to ensure compatibility with the new Zephyr version.
 
 Drivers
 =======
