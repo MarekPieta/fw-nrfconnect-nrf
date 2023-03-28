@@ -55,3 +55,13 @@
   platforms:
     - all
   comment: "Temporary disable till the issue is fixed"
+
+- scenarios:
+    - sample.ant_advanced_burst
+    - sample.ant_background_scanning
+    - sample.ant_broadcast_rx
+    - sample.ant_broadcast_tx
+    - sample.ant_rpc
+  platforms:
+    - all
+  comment: "ANT samples fail to build because the ANT repository redefines IS_POWER_OF_TWO macro"
