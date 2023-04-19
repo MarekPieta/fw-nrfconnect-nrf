@@ -513,11 +513,11 @@ if(CONFIG_BOOTLOADER_MCUBOOT)
         "${app_core_binary_name}load_address=$<TARGET_PROPERTY:partition_manager,PM_MCUBOOT_PRIMARY_ADDRESS>"
         "${app_core_binary_name}image_index=0"
         "${app_core_binary_name}slot_index_primary=1"
-        "${app_core_binary_name}version_MCUBOOT_XIP=${CONFIG_MCUBOOT_IMAGE_VERSION}"
+        "${app_core_binary_name}version_MCUBOOT+XIP=${CONFIG_MCUBOOT_IMAGE_VERSION}"
         "${secondary_app_core_binary_name}load_address=$<TARGET_PROPERTY:partition_manager,PM_MCUBOOT_SECONDARY_ADDRESS>"
         "${secondary_app_core_binary_name}image_index=1"
         "${secondary_app_core_binary_name}slot_index_secondary=2"
-        "${secondary_app_core_binary_name}version_MCUBOOT_XIP=${CONFIG_MCUBOOT_IMAGE_VERSION}"
+        "${secondary_app_core_binary_name}version_MCUBOOT+XIP=${CONFIG_MCUBOOT_IMAGE_VERSION}"
         )
     else()
       # No network core update
