@@ -166,6 +166,7 @@ Sink modules for module_state_event
 * :ref:`nrf_desktop_constlat`
 * :ref:`nrf_desktop_cpu_meas`
 * :ref:`nrf_desktop_dfu`
+* :ref:`nrf_desktop_dfu_mcumgr`
 * :ref:`nrf_desktop_fast_pair_app`
 * :ref:`nrf_desktop_fn_keys`
 * :ref:`nrf_desktop_hfclk_lock`
