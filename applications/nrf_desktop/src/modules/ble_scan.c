@@ -46,13 +46,62 @@ struct subscribed_peer {
 static struct subscribed_peer subscribed_peers[CONFIG_BT_MAX_PAIRED];
 
 static struct bt_conn *discovering_peer_conn;
+
+enum state {
+	STATE_DISABLED,
+	STATE_DISABLED_OFF,
+	STATE_INITIALIZED,
+	STATE_INITIALIZED_OFF,
+	STATE_ACTIVE,
+	STATE_DISCOVERING,
+	STATE_DISCOVERING_OFF,
+	STATE_OFF,
+	STATE_ERROR,
+}
+
 static unsigned int scan_counter;
 static struct k_work_delayable scan_start_trigger;
 static struct k_work_delayable scan_stop_trigger;
-static bool peers_only = !IS_ENABLED(CONFIG_DESKTOP_BLE_NEW_PEER_SCAN_ON_BOOT);
-static bool scanning;
-static bool scan_blocked;
 
+static bool peers_only = !IS_ENABLED(CONFIG_DESKTOP_BLE_NEW_PEER_SCAN_ON_BOOT);
+
+
+static void peer_discovery_start(const struct bt_conn *conn)
+{
+	__ASSERT_NO_MSG(!discovering_peer_conn);
+	discovering_peer_conn = conn;
+	bt_conn_ref(discovering_peer_conn);
+}
+
+static void peer_discovery_end(const struct ble_discovery_complete_event *event)
+{
+	size_t i;
+
+	for (i = 0; i < ARRAY_SIZE(subscribed_peers); i++) {
+		/* Already saved. */
+		if (!bt_addr_le_cmp(&subscribed_peers[i].addr,
+		    bt_conn_get_dst(discovering_peer_conn))) {
+			break;
+		}
+
+		/* Save data about new subscriber. */
+		if (!bt_addr_le_cmp(&subscribed_peers[i].addr, BT_ADDR_LE_NONE)) {
+			__ASSERT_NO_MSG(bt_gatt_dm_conn_get(event->dm) == discovering_peer_conn);
+			bt_addr_le_copy(&subscribed_peers[i].addr,
+					bt_conn_get_dst(bt_gatt_dm_conn_get(event->dm)));
+
+			subscribed_peers[i].peer_type = event->peer_type;
+			subscribed_peers[i].llpm_support = event->peer_llpm_support;
+
+			store_subscribed_peers();
+			break;
+		}
+	}
+	__ASSERT_NO_MSG(i < ARRAY_SIZE(subscribed_peers));
+
+	bt_conn_unref(discovering_peer_conn);
+	discovering_peer_conn = NULL;
+}
 
 static void verify_bond(const struct bt_bond_info *info, void *user_data)
 {
@@ -132,9 +181,18 @@ static size_t count_bond(void)
 	return i;
 }
 
-static void broadcast_scan_state(bool active)
+static void broadcast_scan_state(bool new_active)
 {
+	static bool active;
+
+	if (active == new_active) {
+		return;
+	}
+
+	active = new_active;
+
 	struct ble_peer_search_event *event = new_ble_peer_search_event();
+
 	event->active = active;
 	APP_EVENT_SUBMIT(event);
 }
@@ -153,16 +211,7 @@ static void scan_stop(void)
 		LOG_INF("Scan stopped");
 	}
 
-	scanning = false;
 	broadcast_scan_state(scanning);
-
-	/* Cancel cannot fail if executed from another work's context. */
-	(void)k_work_cancel_delayable(&scan_stop_trigger);
-
-	if (count_conn() < CONFIG_BT_MAX_CONN) {
-		scan_counter = 0;
-		k_work_reschedule(&scan_start_trigger, K_MSEC(SCAN_TRIG_CHECK_MS));
-	}
 }
 
 static int configure_address_filters(uint8_t *filter_mode)
@@ -331,22 +380,15 @@ static void scan_start(void)
 	size_t bond_count = count_bond();
 	int err;
 
-	if (scanning) {
-		scan_stop();
-	}
+	__ASSERT_NO_MSG(!discovering_peer_conn);
+	__ASSERT_NO_MSG(state == STATE_ACTIVE);
 
-	if (IS_ENABLED(CONFIG_DESKTOP_BLE_SCAN_PM_EVENTS) && scan_blocked) {
-		LOG_INF("Power down mode - scanning blocked");
-		return;
-	} else if (IS_ENABLED(CONFIG_DESKTOP_BLE_NEW_PEER_SCAN_REQUEST) &&
-	    (conn_count == bond_count) && peers_only) {
+	if (IS_ENABLED(CONFIG_DESKTOP_BLE_NEW_PEER_SCAN_REQUEST) &&
+	   (conn_count == bond_count) && peers_only) {
 		LOG_INF("All known peers connected - scanning disabled");
 		return;
 	} else if (conn_count == CONFIG_BT_MAX_CONN) {
 		LOG_INF("Max number of peers connected - scanning disabled");
-		return;
-	} else if (discovering_peer_conn) {
-		LOG_INF("Discovery in progress");
 		return;
 	}
 
@@ -374,18 +416,37 @@ static void scan_start(void)
 		LOG_INF("Scan started");
 	}
 
-	scanning = true;
-	broadcast_scan_state(scanning);
-
-	k_work_reschedule(&scan_stop_trigger, K_MSEC(SCAN_DURATION_MS));
-
-	/* Cancel cannot fail if executed from another work's context. */
-	(void)k_work_cancel_delayable(&scan_start_trigger);
-
-	return;
+	broadcast_scan_state(true);
 
 error:
 	module_set_state(MODULE_STATE_ERROR);
+}
+
+static void update_scanning(enum state new_state)
+{
+	if (state != STATE_ACTIVE) {
+		scan_stop();
+		(void)k_work_cancel_delayable(&scan_start_trigger);
+		(void)k_work_cancel_delayable(&scan_stop_trigger);
+	} else {
+		/* Schedule scan start. */
+		(void)k_work_reschedule(&scan_start_trigger, K_NO_WAIT);
+	}
+}
+
+static void update_conn_attempt_filter(enum state new_state)
+{
+	if (IS_ENABLED(CONFIG_BT_SCAN_CONN_ATTEMPTS_FILTER) && (new_state == STATE_ACTIVE)) {
+		bt_scan_conn_attempts_filter_clear();
+	}
+}
+
+static void update_state(enum state new_state)
+{
+	update_scanning();
+	update_conn_attempt_filter();
+
+	state = new_state;
 }
 
 static void scan_start_trigger_fn(struct k_work *w)
@@ -421,10 +482,9 @@ static void scan_filter_match(struct bt_scan_device_info *device_info,
 
 	bt_addr_le_to_str(device_info->recv_info->addr, addr, sizeof(addr));
 
-	LOG_INF("Filters matched. %s %sconnectable",
-		addr, connectable ? "" : "non");
+	LOG_INF("Filters matched. %s %sconnectable", addr, connectable ? "" : "non");
 
-	/* Scanning will be stopped by nrf scan module. */
+	/* Scanning is stopped by the underlying bt_scan implementation. */
 }
 
 static void scan_connecting_error(struct bt_scan_device_info *device_info)
@@ -439,9 +499,7 @@ static void scan_connecting(struct bt_scan_device_info *device_info,
 			    struct bt_conn *conn)
 {
 	LOG_INF("Connecting done");
-	__ASSERT_NO_MSG(!discovering_peer_conn);
-	discovering_peer_conn = conn;
-	bt_conn_ref(discovering_peer_conn);
+	peer_discovery_start();
 }
 
 static int store_subscribed_peers(void)
@@ -511,192 +569,218 @@ static void scan_init(void)
 	k_work_init_delayable(&scan_stop_trigger, scan_stop_trigger_fn);
 }
 
-static bool app_event_handler(const struct app_event_header *aeh)
+static void update_state(enum state new_state)
 {
-	static bool ble_bond_ready;
 
-	if (is_hid_report_event(aeh)) {
-		const struct hid_report_event *event = cast_hid_report_event(aeh);
+}
 
-		/* Ignore HID output reports. Subscriber is NULL for a HID output report. */
-		if (!event->subscriber) {
-			return false;
+static bool handle_hid_report_event(const struct hid_report_event *event)
+{
+	/* TODO handle. */
+
+	return false;
+}
+
+static bool handle_ble_peer_event(const struct ble_peer_event *event)
+{
+	switch (event->state) {
+	case PEER_STATE_CONNECTED:
+	case PEER_STATE_SECURED:
+	case PEER_STATE_DISCONNECTING:
+		/* Ignore */
+		break;
+
+	case PEER_STATE_CONN_FAILED:
+	case PEER_STATE_DISCONNECTED:
+		if (discovering_peer_conn == event->id) {
+			bt_conn_unref(discovering_peer_conn);
+			discovering_peer_conn = NULL;
 		}
-
-		/* Do not scan when devices are in use. */
-		scan_counter = 0;
-
-		if (scanning) {
-			scan_stop();
-		}
-
-		return false;
-	}
-
-	if (is_module_state_event(aeh)) {
-		const struct module_state_event *event =
-			cast_module_state_event(aeh);
-
-		if (check_state(event, MODULE_ID(ble_state),
-				MODULE_STATE_READY)) {
-			static bool initialized;
-
-			__ASSERT_NO_MSG(!initialized);
-			initialized = true;
-
-			scan_init();
-
-			module_set_state(MODULE_STATE_READY);
-		} else if (check_state(event, MODULE_ID(ble_bond), MODULE_STATE_READY)) {
-			/* Settings need to be loaded on start before the scan begins.
-			 * As the ble_bond module reports its READY state also on wake_up_event,
-			 * to avoid multiple scan start triggering on wake-up scan will be started
-			 * from here only on start-up.
-			 */
-			if (!ble_bond_ready) {
-				ble_bond_ready = true;
-				scan_start();
-			}
-		}
-
-		return false;
-	}
-
-	if (is_ble_peer_event(aeh)) {
-		const struct ble_peer_event *event =
-			cast_ble_peer_event(aeh);
-
-		switch (event->state) {
-		case PEER_STATE_CONNECTED:
-		case PEER_STATE_SECURED:
-		case PEER_STATE_DISCONNECTING:
-			/* Ignore */
-			break;
-		case PEER_STATE_CONN_FAILED:
-		case PEER_STATE_DISCONNECTED:
-			if (discovering_peer_conn == event->id) {
-				bt_conn_unref(discovering_peer_conn);
-				discovering_peer_conn = NULL;
-			}
-			/* ble_state keeps reference to connection object.
-			 * Cannot create new connection now.
-			 */
-			scan_counter = SCAN_TRIG_TIMEOUT_MS;
-			k_work_reschedule(&scan_start_trigger, K_MSEC(SCAN_START_DELAY_MS));
-			break;
-		default:
-			__ASSERT_NO_MSG(false);
-			break;
-		}
-		return false;
-	}
-
-	if (is_ble_peer_operation_event(aeh)) {
-		const struct ble_peer_operation_event *event =
-			cast_ble_peer_operation_event(aeh);
-
-		switch (event->op) {
-		case PEER_OPERATION_ERASED:
-			reset_subscribers();
-			store_subscribed_peers();
-			if (count_conn() == CONFIG_BT_MAX_CONN) {
-				if (IS_ENABLED(CONFIG_BT_SCAN_CONN_ATTEMPTS_FILTER)) {
-					bt_scan_conn_attempts_filter_clear();
-				}
-				peers_only = false;
-				break;
-			}
-			/* Fall-through */
-
-		case PEER_OPERATION_SCAN_REQUEST:
-			if (IS_ENABLED(CONFIG_BT_SCAN_CONN_ATTEMPTS_FILTER)) {
-				bt_scan_conn_attempts_filter_clear();
-			}
-			peers_only = false;
-			scan_start();
-			break;
-
-		case PEER_OPERATION_ERASE_ADV:
-		case PEER_OPERATION_ERASE_ADV_CANCEL:
-		case PEER_OPERATION_SELECT:
-		case PEER_OPERATION_SELECTED:
-		case PEER_OPERATION_ERASE:
-		case PEER_OPERATION_CANCEL:
-			/* Ignore */
-			break;
-		default:
-			__ASSERT_NO_MSG(false);
-			break;
-		}
-
-		return false;
-	}
-
-	if (is_ble_discovery_complete_event(aeh)) {
-		const struct ble_discovery_complete_event *event =
-			cast_ble_discovery_complete_event(aeh);
-		size_t i;
-
-		for (i = 0; i < ARRAY_SIZE(subscribed_peers); i++) {
-			/* Already saved. */
-			if (!bt_addr_le_cmp(&subscribed_peers[i].addr,
-				  bt_conn_get_dst(discovering_peer_conn))) {
-				break;
-			}
-
-			/* Save data about new subscriber. */
-			if (!bt_addr_le_cmp(&subscribed_peers[i].addr,
-					    BT_ADDR_LE_NONE)) {
-				bt_addr_le_copy(&subscribed_peers[i].addr,
-					bt_conn_get_dst(discovering_peer_conn));
-				subscribed_peers[i].peer_type =
-					event->peer_type;
-				subscribed_peers[i].llpm_support =
-					event->peer_llpm_support;
-				store_subscribed_peers();
-				break;
-			}
-		}
-		__ASSERT_NO_MSG(i < ARRAY_SIZE(subscribed_peers));
-
-		bt_conn_unref(discovering_peer_conn);
-		discovering_peer_conn = NULL;
-
-		/* Cannot start scanning right after discovery - problems
-		 * establishing security - using delayed work as workaround.
+		/* ble_state keeps reference to connection object.
+		 * Cannot create new connection now.
 		 */
 		scan_counter = SCAN_TRIG_TIMEOUT_MS;
-		k_work_reschedule(&scan_start_trigger, K_MSEC(SCAN_TRIG_TIMEOUT_MS));
+		k_work_reschedule(&scan_start_trigger, K_MSEC(SCAN_START_DELAY_MS));
+		break;
 
+	default:
+		__ASSERT_NO_MSG(false);
+		break;
+	}
+
+	return false;
+}
+
+static bool handle_ble_peer_operation_event(const struct ble_peer_operation_event *event)
+{
+	switch (event->op) {
+	case PEER_OPERATION_ERASED:
+		reset_subscribers();
+		store_subscribed_peers();
+		if (count_conn() == CONFIG_BT_MAX_CONN) {
+			peers_only = false;
+			break;
+		}
+		/* Fall-through */
+
+	case PEER_OPERATION_SCAN_REQUEST:
 		if (IS_ENABLED(CONFIG_BT_SCAN_CONN_ATTEMPTS_FILTER)) {
 			bt_scan_conn_attempts_filter_clear();
 		}
+		peers_only = false;
+		scan_start();
+		break;
 
-		return false;
+	case PEER_OPERATION_ERASE_ADV:
+	case PEER_OPERATION_ERASE_ADV_CANCEL:
+	case PEER_OPERATION_SELECT:
+	case PEER_OPERATION_SELECTED:
+	case PEER_OPERATION_ERASE:
+	case PEER_OPERATION_CANCEL:
+		/* Ignore */
+		break;
+	default:
+		__ASSERT_NO_MSG(false);
+		break;
+	}
+
+	return false;
+}
+
+static bool handle_ble_discovery_complete_event(const struct ble_discovery_complete_event *event)
+{
+	__ASSERT_NO_MSG((state == STATE_DISCOVERING) || (state == STATE_DISCOVERING_OFF));
+
+
+
+	/* Cannot start scanning right after discovery - problems
+	 * establishing security - using delayed work as workaround.
+	 */
+	scan_counter = SCAN_TRIG_TIMEOUT_MS;
+	k_work_reschedule(&scan_start_trigger, K_MSEC(SCAN_TRIG_TIMEOUT_MS));
+
+	if (IS_ENABLED(CONFIG_BT_SCAN_CONN_ATTEMPTS_FILTER)) {
+		bt_scan_conn_attempts_filter_clear();
+	}
+
+	update_state(STATE_ACTIVE);
+
+	return false;
+}
+
+static bool handle_module_state_event(const struct module_state_event *event)
+{
+	if (check_state(event, MODULE_ID(ble_state), MODULE_STATE_READY)) {
+		switch (state) {
+		case STATE_DISABLED:
+			update_state(STATE_INITIALIZED);
+			breal
+
+		case STATE_DISABLED_OFF:
+			update_state(STATE_INITIALIZED_OFF);
+			break;
+
+		default:
+			/* Should not happen. */
+			__ASSERT_NO_MSG(false);
+			break;
+		}
+	} else if (check_state(event, MODULE_ID(ble_bond), MODULE_STATE_READY)) {
+		/* Settings need to be loaded on start before the scan begins.
+		 * As the ble_bond module reports its READY state also on wake_up_event,
+		 * to avoid multiple scan start triggering on wake-up scan will be started
+		 * from here only on start-up.
+		 */
+		switch(state) {
+		case STATE_INITIALIZED:
+			update_state(STATE_ACTIVE);
+			break;
+
+		case STATE_INITIALIZED_OFF:
+			update_state(STATE_OFF);
+			break;
+
+		default:
+			break;
+		}
+	}
+
+	return false;
+}
+
+static bool handle_power_down_event(const struct power_down_event *event)
+{
+	ARG_UNUSED(event);
+
+	switch (state) {
+	case STATE_DISABLED:
+		update_state(STATE_DISABLED_OFF);
+		break;
+
+	case STATE_IDLE:
+	case STATE_ACTIVE:
+		update_state(STATE_OFF);
+		break;
+
+	default:
+		break;
+
+	}
+
+	return false;
+}
+
+static bool handle_wake_up_event(const struct wake_up_event *event)
+{
+	ARG_UNUSED(event);
+
+	switch (state) {
+	case STATE_DISABLED_OFF:
+		update_state(STATE_DISABLED);
+		break;
+
+	case STATE_OFF:
+		update_state(STATE_ACTIVE);
+		break;
+
+	default:
+		break;
+
+	}
+
+	return false;
+}
+
+static bool app_event_handler(const struct app_event_header *aeh)
+{
+	if (is_hid_report_event(aeh)) {
+		return handle_hid_report_event(cast_hid_report_event(aeh));
+	}
+
+	if (is_module_state_event(aeh)) {
+		return handle_module_state_event(cast_module_state_event(aeh);
+	}
+
+	if (is_ble_peer_event(aeh)) {
+		return handle_ble_peer_event(cast_ble_peer_event(aeh));
+	}
+
+	if (is_ble_peer_operation_event(aeh)) {
+		return handle_ble_peer_operation_event(cast_ble_peer_operation_event(aeh));
+	}
+
+	if (is_ble_discovery_complete_event(aeh)) {
+		return handle_ble_discovery_complete_event(cast_ble_discovery_complete_event(aeh));
 	}
 
 	if (IS_ENABLED(CONFIG_DESKTOP_BLE_SCAN_PM_EVENTS) &&
 	    is_power_down_event(aeh)) {
-		if (scanning) {
-			scan_stop();
-		}
-
-		scan_blocked = true;
-		k_work_cancel_delayable(&scan_start_trigger);
-
-		return false;
+		return handle_power_down_event(cast_power_down_event(aeh));
 	}
 
 	if (IS_ENABLED(CONFIG_DESKTOP_BLE_SCAN_PM_EVENTS) &&
 	    is_wake_up_event(aeh)) {
-		if (scan_blocked) {
-			scan_blocked = false;
-			if (ble_bond_ready) {
-				scan_start();
-			}
-		}
-
-		return false;
+		return handle_wake_up_event(cast_wake_up_event(aeh));
 	}
 
 	/* If event is unhandled, unsubscribe. */
