@@ -27,6 +27,7 @@ LOG_MODULE_REGISTER(MODULE, CONFIG_DESKTOP_BLE_SCAN_LOG_LEVEL);
 #define SCAN_TRIG_CHECK_MS	(1 * MSEC_PER_SEC)
 #define SCAN_TRIG_TIMEOUT_MS	(CONFIG_DESKTOP_BLE_SCAN_START_TIMEOUT_S * MSEC_PER_SEC)
 #define SCAN_DURATION_MS	(CONFIG_DESKTOP_BLE_SCAN_DURATION_S * MSEC_PER_SEC)
+#define SCAN_FORCE_DURARION_MS	(CONFIG_DESKTOP_BLE_SCAN_FORCE_DURATION_S * MSEC_PER_SEC)
 #define SCAN_START_DELAY_MS	15
 
 #define SUBSCRIBED_PEERS_STORAGE_NAME "subscribers"
@@ -60,6 +61,7 @@ static struct k_work_delayable scan_start_trigger;
 static struct k_work_delayable scan_stop_trigger;
 static bool peers_only = !IS_ENABLED(CONFIG_DESKTOP_BLE_NEW_PEER_SCAN_ON_BOOT);
 static bool scanning;
+static bool force_scan;
 
 static enum state state;
 
@@ -242,6 +244,8 @@ static void scan_stop(void)
 
 	scanning = false;
 	broadcast_scan_state(scanning);
+
+	force_scan = false;
 
 	/* Cancel cannot fail if executed from another work's context. */
 	(void)k_work_cancel_delayable(&scan_stop_trigger);
@@ -488,8 +492,12 @@ static void scan_start_trigger_fn(struct k_work *w)
 static void scan_stop_trigger_fn(struct k_work *w)
 {
 	BUILD_ASSERT(SCAN_DURATION_MS > 0, "");
+	BUILD_ASSERT(SCAN_FORCE_DURATION_MS > 0, "");
 
-	if (count_conn() != 0) {
+	if (force_scan) {
+		force_scan = false;
+		(void)k_work_reschedule(&scan_stop_trigger, K_MSEC(SCAN_DURATION_MS));
+	} else if (count_conn() != 0) {
 		peers_only = true;
 		scan_stop();
 	}
@@ -565,6 +573,7 @@ static void scan_init(void)
 static void update_state_scan_control(enum state new_state)
 {
 	if (new_state == STATE_ACTIVE) {
+		force_scan = true;
 		scan_start();
 	} else if ((new_state == STATE_OFF) || (new_state == STATE_ERROR)) {
 		scan_stop();
@@ -590,8 +599,10 @@ static bool handle_hid_report_event(const struct hid_report_event *event)
 	}
 
 	/* Do not scan when devices are in use. */
-	scan_counter = 0;
-	scan_stop();
+	if (!force_scan) {
+		scan_counter = 0;
+		scan_stop();
+	}
 
 	return false;
 }
@@ -666,6 +677,7 @@ static bool handle_ble_peer_event(const struct ble_peer_event *event)
 		 * Cannot create new connection now.
 		 */
 		scan_counter = SCAN_TRIG_TIMEOUT_MS;
+		force_scan = true;
 		(void)k_work_reschedule(&scan_start_trigger, K_MSEC(SCAN_START_DELAY_MS));
 		break;
 
@@ -689,6 +701,7 @@ static bool handle_ble_peer_operation_event(const struct ble_peer_operation_even
 			bt_scan_conn_attempts_filter_clear();
 		}
 		peers_only = false;
+		force_scan = true;
 		scan_start();
 		break;
 
@@ -717,6 +730,7 @@ static bool handle_ble_discovery_complete_event(const struct ble_discovery_compl
 	 * establishing security - using delayed work as workaround.
 	 */
 	scan_counter = SCAN_TRIG_TIMEOUT_MS;
+	force_scan = true;
 	(void)k_work_reschedule(&scan_start_trigger, K_MSEC(SCAN_TRIG_TIMEOUT_MS));
 
 	if (IS_ENABLED(CONFIG_BT_SCAN_CONN_ATTEMPTS_FILTER)) {
