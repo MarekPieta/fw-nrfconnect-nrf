@@ -213,6 +213,10 @@ static void broadcast_scan_state(bool active)
 
 static void scan_stop(void)
 {
+	if (!scanning) {
+		return;
+	}
+
 	int err = bt_scan_stop();
 
 	if (err == -EALREADY) {
@@ -398,9 +402,7 @@ static void scan_start(void)
 	size_t bond_count = count_bond();
 	int err;
 
-	if (scanning) {
-		scan_stop();
-	}
+	scan_stop();
 
 	if (IS_ENABLED(CONFIG_DESKTOP_BLE_SCAN_PM_EVENTS) && scan_blocked) {
 		LOG_INF("Power down mode - scanning blocked");
@@ -555,10 +557,7 @@ static bool handle_hid_report_event(const struct hid_report_event *event)
 
 	/* Do not scan when devices are in use. */
 	scan_counter = 0;
-
-	if (scanning) {
-		scan_stop();
-	}
+	scan_stop();
 
 	return false;
 }
