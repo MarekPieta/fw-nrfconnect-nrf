@@ -31,6 +31,16 @@ LOG_MODULE_REGISTER(MODULE, CONFIG_DESKTOP_BLE_SCAN_LOG_LEVEL);
 
 #define SUBSCRIBED_PEERS_STORAGE_NAME "subscribers"
 
+enum state {
+	STATE_DISABLED,
+	STATE_DISABLED_OFF,
+	STATE_INITIALIZED,
+	STATE_INITIALIZED_OFF,
+	STATE_ACTIVE,
+	STATE_OFF,
+	STATE_ERROR,
+};
+
 struct subscriber_data {
 	uint8_t conn_count;
 	uint8_t peer_count;
@@ -50,8 +60,9 @@ static struct k_work_delayable scan_start_trigger;
 static struct k_work_delayable scan_stop_trigger;
 static bool peers_only = !IS_ENABLED(CONFIG_DESKTOP_BLE_NEW_PEER_SCAN_ON_BOOT);
 static bool scanning;
-static bool scan_blocked;
-static bool ble_bond_ready;
+
+static enum state state;
+
 
 static int store_subscribed_peers(void)
 {
@@ -404,8 +415,11 @@ static void scan_start(void)
 
 	scan_stop();
 
-	if (IS_ENABLED(CONFIG_DESKTOP_BLE_SCAN_PM_EVENTS) && scan_blocked) {
+	if (IS_ENABLED(CONFIG_DESKTOP_BLE_SCAN_PM_EVENTS) && (state == STATE_OFF)) {
 		LOG_INF("Power down mode - scanning blocked");
+		return;
+	} else if (state != STATE_ACTIVE) {
+		LOG_INF("Not yet initialized - scanning blocked");
 		return;
 	} else if (IS_ENABLED(CONFIG_DESKTOP_BLE_NEW_PEER_SCAN_REQUEST) &&
 		   (conn_count == bond_count) && peers_only) {
@@ -548,6 +562,26 @@ static void scan_init(void)
 	k_work_init_delayable(&scan_stop_trigger, scan_stop_trigger_fn);
 }
 
+static void update_state_scan_control(enum state new_state)
+{
+	if (new_state == STATE_ACTIVE) {
+		scan_start();
+	} else if ((new_state == STATE_OFF) || (new_state == STATE_ERROR)) {
+		scan_stop();
+		(void)k_work_cancel_delayable(&scan_start_trigger);
+	}
+}
+
+static void update_state(enum state new_state)
+{
+	if (state == STATE_ERROR) {
+		return;
+	}
+
+	update_state_scan_control(new_state);
+	state = new_state;
+}
+
 static bool handle_hid_report_event(const struct hid_report_event *event)
 {
 	/* Ignore HID output reports. Subscriber is NULL for a HID output report. */
@@ -565,23 +599,48 @@ static bool handle_hid_report_event(const struct hid_report_event *event)
 static bool handle_module_state_event(const struct module_state_event *event)
 {
 	if (check_state(event, MODULE_ID(ble_state), MODULE_STATE_READY)) {
-		static bool initialized;
+		bool initialize = false;
 
-		__ASSERT_NO_MSG(!initialized);
-		initialized = true;
+		switch (state) {
+		case STATE_DISABLED:
+			update_state(STATE_INITIALIZED);
+			initialize = true;
+			break;
 
-		scan_init();
+		case STATE_DISABLED_OFF:
+			update_state(STATE_INITIALIZED_OFF);
+			initialize = true;
+			break;
 
-		module_set_state(MODULE_STATE_READY);
+		default:
+			/* Should not happen. */
+			__ASSERT_NO_MSG(false);
+			update_state(STATE_ERROR);
+			break;
+		}
+
+		if (initialize) {
+			scan_init();
+			module_set_state(MODULE_STATE_READY);
+		}
 	} else if (check_state(event, MODULE_ID(ble_bond), MODULE_STATE_READY)) {
 		/* Settings need to be loaded on start before the scan begins.
 		 * As the ble_bond module reports its READY state also on wake_up_event,
 		 * to avoid multiple scan start triggering on wake-up scan will be started
 		 * from here only on start-up.
 		 */
-		if (!ble_bond_ready) {
-			ble_bond_ready = true;
-			scan_start();
+		switch (state) {
+		case STATE_INITIALIZED:
+			update_state(STATE_ACTIVE);
+			break;
+
+		case STATE_INITIALIZED_OFF:
+			update_state(STATE_OFF);
+			break;
+
+		default:
+			/* Ignore the event. */
+			break;
 		}
 	}
 
@@ -669,23 +728,51 @@ static bool handle_ble_discovery_complete_event(const struct ble_discovery_compl
 
 static bool handle_power_down_event(const struct power_down_event *event)
 {
-	if (scanning) {
-		scan_stop();
-	}
+	switch (state) {
+	case STATE_DISABLED:
+		update_state(STATE_DISABLED_OFF);
+		break;
 
-	scan_blocked = true;
-	(void)k_work_cancel_delayable(&scan_start_trigger);
+	case STATE_INITIALIZED:
+		update_state(STATE_INITIALIZED_OFF);
+		break;
+
+	case STATE_ACTIVE:
+		update_state(STATE_OFF);
+		break;
+
+	case STATE_DISABLED_OFF:
+	case STATE_INITIALIZED_OFF:
+	case STATE_OFF:
+	case STATE_ERROR:
+		/* Ignore event. */
+		break;
+	}
 
 	return false;
 }
 
 static bool handle_wake_up_event(const struct wake_up_event *event)
 {
-	if (scan_blocked) {
-		scan_blocked = false;
-		if (ble_bond_ready) {
-			scan_start();
-		}
+	switch (state) {
+	case STATE_DISABLED_OFF:
+		update_state(STATE_DISABLED);
+		break;
+
+	case STATE_INITIALIZED_OFF:
+		update_state(STATE_INITIALIZED);
+		break;
+
+	case STATE_OFF:
+		update_state(STATE_ACTIVE);
+		break;
+
+	case STATE_DISABLED:
+	case STATE_INITIALIZED:
+	case STATE_ACTIVE:
+	case STATE_ERROR:
+		/* Ignore event. */
+		break;
 	}
 
 	return false;
