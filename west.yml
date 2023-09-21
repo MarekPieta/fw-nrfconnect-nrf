@@ -39,6 +39,8 @@ manifest:
       url-base: https://github.com/BabbleSim
     - name: bosch
       url-base: https://github.com/boschsensortec
+    - name: MarekPieta
+      url-base: https://github.com/MarekPieta
 
   # If not otherwise specified, the projects below should be obtained
   # from the ncs remote.
@@ -237,6 +239,10 @@ manifest:
       submodules: true
       revision: f65066f15d8248e6dcb778efb8739904a4512087
       remote: throwtheswitch
+    - name: test_zmodule
+      path: test_zmodule
+      revision: d89d19e990cc9889599dbb8b83d1b0eac427640b
+      remote: MarekPieta
     - name: memfault-firmware-sdk
       path: modules/lib/memfault-firmware-sdk
       revision: 0.43.3
