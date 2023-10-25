@@ -15,6 +15,7 @@
 #include <bluetooth/adv_prov.h>
 
 #define MODULE ble_adv
+#include <caf/../../applications/nrf_desktop/src/events/usb_event.h>
 #include <caf/events/module_state_event.h>
 #include <caf/events/ble_common_event.h>
 #include <caf/events/power_event.h>
@@ -46,6 +47,7 @@ static size_t req_grace_period_s;
 static bool req_wakeup;
 static bool req_fast_adv = true;
 static bool req_new_adv_session = true;
+static bool force_suspend;
 
 static struct k_work adv_delayed_start;
 static struct k_work_delayable fast_adv_end;
@@ -423,6 +425,10 @@ finish:
 
 static void ble_adv_start_schedule(void)
 {
+	if (force_suspend) {
+		return;
+	}
+
 	__ASSERT_NO_MSG((state == STATE_ACTIVE) || (state == STATE_GRACE_PERIOD) ||
 			(state == STATE_DELAYED_ACTIVE));
 
@@ -431,6 +437,10 @@ static void ble_adv_start_schedule(void)
 
 static void ble_adv_data_update(void)
 {
+	if (force_suspend) {
+		return;
+	}
+
 	if ((state != STATE_ACTIVE) && (state != STATE_GRACE_PERIOD)) {
 		return;
 	}
@@ -450,7 +460,8 @@ static void ble_adv_data_update(void)
 
 static void ble_adv_stop(void)
 {
-	__ASSERT_NO_MSG((state == STATE_OFF) || (state == STATE_IDLE) || (state == STATE_ERROR));
+	__ASSERT_NO_MSG(force_suspend || (state == STATE_OFF) || (state == STATE_IDLE) ||
+			(state == STATE_ERROR));
 
 	int err = bt_le_adv_stop();
 
@@ -578,6 +589,11 @@ static void update_rpa_rotate_work(void)
 		return;
 	}
 
+	if (force_suspend) {
+		(void)k_work_cancel_delayable(&rpa_rotate);
+		return;
+	}
+
 	if (((state != STATE_ACTIVE) && (state != STATE_GRACE_PERIOD)) || direct_adv) {
 		(void)k_work_cancel_delayable(&rpa_rotate);
 	}
@@ -586,6 +602,11 @@ static void update_rpa_rotate_work(void)
 static void update_grace_period_work(void)
 {
 	if (!IS_ENABLED(CONFIG_CAF_BLE_ADV_GRACE_PERIOD)) {
+		return;
+	}
+
+	if (force_suspend) {
+		(void)k_work_cancel_delayable(&grace_period_end);
 		return;
 	}
 
@@ -599,6 +620,11 @@ static void update_grace_period_work(void)
 
 static void update_fast_adv_work(void)
 {
+	if (force_suspend) {
+		(void)k_work_cancel_delayable(&fast_adv_end);
+		return;
+	}
+
 	if ((state == STATE_ACTIVE) && fast_adv && !direct_adv) {
 		(void)k_work_reschedule(&fast_adv_end,
 					K_SECONDS(CONFIG_CAF_BLE_ADV_FAST_ADV_TIMEOUT));
@@ -610,6 +636,13 @@ static void update_fast_adv_work(void)
 static void notify_ble_stack(void)
 {
 	(void)k_work_cancel(&adv_delayed_start);
+
+	if (force_suspend) {
+		if (!is_module_state_disabled(state)) {
+			ble_adv_stop();
+		}
+		return;
+	}
 
 	switch (state) {
 	case STATE_DISABLED:
@@ -1039,6 +1072,29 @@ static bool handle_wake_up_event(const struct wake_up_event *event)
 	return false;
 }
 
+static bool handle_usb_state_event(const struct usb_state_event *event)
+{
+	bool was_force_suspended = force_suspend;
+	struct bt_conn *conn = conn_get();
+
+	if (was_force_suspended && (event->state == USB_STATE_DISCONNECTED)) {
+		force_suspend = false;
+	} else if (!was_force_suspended && (event->state == USB_STATE_ACTIVE)) {
+		force_suspend = true;
+
+		if (conn) {
+			disconnect_peer(conn);
+		}
+	}
+
+	if (was_force_suspended != force_suspend) {
+		/* Refresh module's internal state. */
+		update_state(state);
+	}
+
+	return false;
+}
+
 static bool app_event_handler(const struct app_event_header *aeh)
 {
 	if (is_module_state_event(aeh)) {
@@ -1068,6 +1124,10 @@ static bool app_event_handler(const struct app_event_header *aeh)
 		return handle_wake_up_event(cast_wake_up_event(aeh));
 	}
 
+	if (is_usb_state_event(aeh)) {
+		return handle_usb_state_event(cast_usb_state_event(aeh));
+	}
+
 	/* If event is unhandled, unsubscribe. */
 	__ASSERT_NO_MSG(false);
 
@@ -1084,3 +1144,4 @@ APP_EVENT_SUBSCRIBE(MODULE, ble_peer_operation_event);
 APP_EVENT_SUBSCRIBE(MODULE, power_down_event);
 APP_EVENT_SUBSCRIBE(MODULE, wake_up_event);
 #endif /* CONFIG_CAF_BLE_ADV_PM_EVENTS */
+APP_EVENT_SUBSCRIBE(MODULE, usb_state_event);
