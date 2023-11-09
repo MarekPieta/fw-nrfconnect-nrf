@@ -312,27 +312,32 @@ static void complete_dfu_data_store(void)
 
 static void store_dfu_data_chunk(void)
 {
-	/* Some flash may require word alignment. */
-	BUILD_ASSERT((STORE_CHUNK_SIZE % sizeof(uint32_t)) == 0);
-	BUILD_ASSERT((sizeof(sync_buffer) % sizeof(uint32_t)) == 0);
-
 	__ASSERT_NO_MSG(store_offset <= sync_offset);
 	__ASSERT_NO_MSG(flash_area != NULL);
 
+	uint32_t write_block_size = flash_area_align(flash_area);
+	uint8_t erased_val = flash_area_erased_val(flash_area);
+
 	size_t store_size = STORE_CHUNK_SIZE;
+	size_t append_cnt = 0;
 
 	if (sync_offset - store_offset < store_size) {
 		store_size = sync_offset - store_offset;
 	}
-	if ((store_size > sizeof(uint32_t)) &&
-	    ((store_size % sizeof(uint32_t)) != 0)) {
-		/* Required by some flash drivers. */
-		store_size = (store_size / sizeof(uint32_t)) * sizeof(uint32_t);
+
+	if (store_size % write_block_size != 0) {
+		if (store_size > write_block_size) {
+			store_size = (store_size / write_block_size * write_block_size);
+		} else {
+			append_cnt = write_block_size - (store_size % write_block_size);
+
+			memset(&sync_buffer[store_offset + store_size], erased_val, append_cnt);
+		}
 	}
 
 	LOG_DBG("DFU data store chunk: %" PRIu32, cur_offset + store_offset);
 	int err = flash_area_write(flash_area, cur_offset + store_offset,
-				   &sync_buffer[store_offset], store_size);
+				   &sync_buffer[store_offset], store_size + append_cnt);
 	if (err) {
 		LOG_ERR("Cannot write data (%d)", err);
 		terminate_dfu();
@@ -824,6 +829,21 @@ static void fetch_config(const uint8_t opt_id, uint8_t *data, size_t *size)
 	}
 }
 
+static void verify_configuration(void)
+{
+	int err = flash_area_open(DFU_SLOT_ID, &flash_area);
+
+	__ASSERT_NO_MSG(!err && flash_area);
+
+	uint32_t write_block_size = flash_area_align(flash_area);
+
+	/* Ensure that size and alignment of write block is aligned to flash driver requirements. */
+	__ASSERT_NO_MSG((STORE_CHUNK_SIZE % write_block_size) == 0);
+	__ASSERT_NO_MSG((sizeof(sync_buffer) % write_block_size) == 0);
+
+	flash_area_close(flash_area);
+}
+
 static bool app_event_handler(const struct app_event_header *aeh)
 {
 	if (is_hid_report_event(aeh)) {
@@ -867,6 +887,10 @@ static bool app_event_handler(const struct app_event_header *aeh)
 				ret = dfu_lock_claim(&config_channel_owner);
 				__ASSERT_NO_MSG(!ret);
 				ARG_UNUSED(ret);
+			}
+
+			if (IS_ENABLED(CONFIG_ASSERT)) {
+				verify_configuration();
 			}
 
 			k_work_reschedule(&background_erase, K_NO_WAIT);
