@@ -30,6 +30,10 @@ LOG_MODULE_REGISTER(MODULE, CONFIG_DESKTOP_HIDS_LOG_LEVEL);
 
 #define BASE_USB_HID_SPEC_VERSION   0x0101
 
+#define HIDS_SUBSCRIBER_PRIORITY      CONFIG_DESKTOP_HIDS_SUBSCRIBER_PRIORITY
+#define HIDS_SUBSCRIBER_PIPELINE_SIZE 0x02
+#define HIDS_SUBSCRIBER_REPORT_MAX    UINT8_MAX
+
 BT_HIDS_DEF(hids_obj,
 	IF_ENABLED(CONFIG_DESKTOP_HID_REPORT_MOUSE_SUPPORT,
 		   (REPORT_SIZE_MOUSE,))
@@ -487,20 +491,51 @@ static void notify_secured_fn(struct k_work *work)
 	}
 }
 
+static void broadcast_hids_subscriber_state(void *subscriber, bool enabled)
+{
+	struct hid_report_subscriber_event *event = new_hid_report_subscriber_event();
+
+	event->subscriber = subscriber;
+
+	if (enabled) {
+		event->params.pipeline_size = HIDS_SUBSCRIBER_PIPELINE_SIZE;
+		event->params.priority = HIDS_SUBSCRIBER_PRIORITY;
+		event->params.report_max = HIDS_SUBSCRIBER_REPORT_MAX;
+	}
+
+	event->connected = enabled;
+
+	APP_EVENT_SUBMIT(event);
+}
+
 static void notify_hids(const struct ble_peer_event *event)
 {
 	int err = 0;
+	static bool subscriber_connected;
 
 	switch (event->state) {
 	case PEER_STATE_CONNECTED:
 		__ASSERT_NO_MSG(cur_conn == NULL);
 		cur_conn = event->id;
 		err = bt_hids_connected(&hids_obj, event->id);
-
 		if (err) {
 			LOG_ERR("Failed to notify the HID Service about the"
 				" connection");
 		}
+
+		__ASSERT_NO_MSG(!subscriber_connected);
+
+		broadcast_hids_subscriber_state(event->id, true);
+
+		subscriber_connected = true;
+
+		break;
+
+	case PEER_STATE_DISCONNECTING:
+		__ASSERT_NO_MSG(subscriber_connected);
+
+		broadcast_hids_subscriber_state(event->id, false);
+		subscriber_connected = false;
 		break;
 
 	case PEER_STATE_DISCONNECTED:
@@ -509,6 +544,14 @@ static void notify_hids(const struct ble_peer_event *event)
 
 		if (err) {
 			LOG_ERR("Connection context was not allocated");
+		}
+
+		/* Subscriber might have been disconnected earlier during processing
+		 * the PEER_STATE_DISCONNECTING event.
+		 */
+		if (subscriber_connected) {
+			broadcast_hids_subscriber_state(event->id, false);
+			subscriber_connected = false;
 		}
 
 		if (IS_ENABLED(CONFIG_DESKTOP_CONFIG_CHANNEL_ENABLE)) {
@@ -537,7 +580,6 @@ static void notify_hids(const struct ble_peer_event *event)
 
 		break;
 
-	case PEER_STATE_DISCONNECTING:
 	case PEER_STATE_CONN_FAILED:
 		/* No action */
 		break;
