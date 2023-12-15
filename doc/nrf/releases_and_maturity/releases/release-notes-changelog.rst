@@ -204,6 +204,11 @@ nRF Machine Learning (Edge Impulse)
 nRF Desktop
 -----------
 
+* Added:
+
+  * The new :c:struct:`hid_report_subscriber_event` for adding a different subscriber to
+    HID reports.
+
 * Updated:
 
   * The :ref:`nrf_desktop_dfu` to use :ref:`partition_manager` definitions for determining currently booted image slot in build time.
@@ -218,6 +223,7 @@ nRF Desktop
     The ``CONFIG_USB_HID_PROTOCOL_CODE`` Kconfig option is deprecated and a dedicated API needs to be used instead.
   * The :ref:`nrf_desktop_watchdog` to use ``watchdog0`` DTS alias instead of ``wdt`` DTS node label.
     Using the alias makes the configuration of the module more flexible.
+  * Replaced the ``usb_hid_event`` with the :c:struct:`hid_report_subscriber_event`.
 
 Thingy:53: Matter weather station
 ---------------------------------
