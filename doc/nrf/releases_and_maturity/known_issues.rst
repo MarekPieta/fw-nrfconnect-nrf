@@ -1337,6 +1337,16 @@ NCSDK-8304: HID configurator issues for peripherals connected over Bluetooth® L
 
   **Workaround:** Use BlueZ in version 5.56 or higher.
 
+.. rst-class:: v2-5-1 v2-5-0
+
+NCSDK-23704: Event Manager out-of-memory (OOM) error on nRF5340 DK during peer discovery
+  The heap size is too small to handle discovery of a peer connected for the first time.
+  Too small heap size might alternatively lead to issues when allocating memory for UUID in :ref:`gatt_dm_readme`, because the library also uses heap to allocate internal data.
+
+  **Affected platforms:** nRF5340 DK
+
+  **Workaround:** Manually cherry-pick and apply commit with fix from ``main`` (commit hash: ``be97ae3074c38b7987d5183b1c09995cf19d61e8``).
+
 .. rst-class:: v2-4-2 v2-4-1 v2-4-0 v2-3-0 v2-2-0 v2-1-3 v2-1-2 v2-1-1 v2-1-0 v2-0-2 v2-0-1 v2-0-0 v1-9-2 v1-9-1 v1-9-0 v1-8-0 v1-7-1 v1-7-0
 
 NCSDK-22953: A HID output report interrupts scanning in the :ref:`nrf_desktop_ble_scan` even if there are no peripherals connected
