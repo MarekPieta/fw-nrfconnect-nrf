@@ -1367,7 +1367,7 @@ NCSDK-19970: MCUboot bootloader fails to swap images on nRF52840 DK that uses ex
    The MCUboot bootloader cannot access external flash because the chosen ``nordic,pm-ext-flash`` is not defined in the MCUboot child image's devicetree.
    As a result ``nrf52840dk_nrf52840`` using ``prj_mcuboot_qspi.conf`` configuration fails to swap images after a complete image transfer.
 
-   **Affected platforms:** nRF52840
+   **Affected platforms:** nRF52840 DK
 
    **Workaround**: Manually cherry-pick and apply the commit with the fix from the ``main`` branch (commit hash: ``7cea1b7e681a39ce2e2143b6b03132d95b7606ab``).
    Make sure to also cherry-pick and apply the commit that fixes a build system issue (commit `ec23df1fa305e99194ceac87a028f6da206a3ff1` from ``main`` branch).
@@ -1458,7 +1458,7 @@ NCSDK-14117: Build fails for nRF52840DK in the ``prj_b0_wwcb`` configuration
   The build failure is caused by outdated Kconfig options in the nRF52840 DK's ``prj_b0_wwcb`` configuration.
   The nRF52840 DK's ``prj_b0_wwcb`` configuration does not explicitly define static partition map either.
 
-  **Affected platforms:** nRF52840
+  **Affected platforms:** nRF52840 DK
 
   **Workaround:** Manually cherry-pick and apply commit with fix from ``main`` (commit hash: ``cf4c465aceeb00d83a4f50edf67ce8c26427ac52``).
 
