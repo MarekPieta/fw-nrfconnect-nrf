@@ -5,11 +5,12 @@
 #
 
 source "share/sysbuild/Kconfig"
+rsource "boards/Kconfig.sysbuild_$(BOARD)"
 
 config IMAGE_2_BOARD
-	string "Second additional board name to build sample for"
-	default "nrf5340dk_nrf5340_cpunet" if $(BOARD) = "nrf5340dk_nrf5340_cpuapp"
-	default "nrf5340dk_nrf5340_cpunet" if $(BOARD) = "nrf5340dk_nrf5340_cpuapp_ns"
+	string
+	default ""
 
 config IMAGE_3_BOARD
-	string "Third additional board name to build sample for"
+	string
+	default ""
