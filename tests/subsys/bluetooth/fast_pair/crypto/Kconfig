@@ -8,6 +8,16 @@ menu "Test configuration"
 source "$(ZEPHYR_NRF_MODULE_DIR)/subsys/bluetooth/services/fast_pair/fp_crypto/Kconfig.fp_crypto"
 endmenu
 
+if BUILD_WITH_TFM
+
+choice TFM_PROFILE_TYPE
+	default TFM_PROFILE_TYPE_NOT_SET
+	help
+	  The minimal TFM build profile is not configurable and cannot be used.
+endchoice
+
+endif # BUILD_WITH_TFM
+
 menu "Zephyr"
 source "Kconfig.zephyr"
 endmenu
