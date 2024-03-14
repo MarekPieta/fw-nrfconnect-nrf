@@ -23,8 +23,8 @@ LOG_MODULE_REGISTER(fp_crypto, CONFIG_FP_CRYPTO_LOG_LEVEL);
 					 FP_CRYPTO_ADDITIONAL_DATA_NONCE_LEN)
 
 
-int fp_crypto_aes128_ctr_encrypt(uint8_t *out, const uint8_t *in, size_t data_len,
-				 const uint8_t *key, const uint8_t *nonce)
+int __weak fp_crypto_aes128_ctr_encrypt(uint8_t *out, const uint8_t *in, size_t data_len,
+					 const uint8_t *key, const uint8_t *nonce)
 {
 	static const uint8_t aes_input_pad_pos = 1;
 	static const uint8_t aes_input_pad_len = 7;
@@ -63,8 +63,8 @@ int fp_crypto_aes128_ctr_encrypt(uint8_t *out, const uint8_t *in, size_t data_le
 	return 0;
 }
 
-int fp_crypto_aes128_ctr_decrypt(uint8_t *out, const uint8_t *in, size_t data_len,
-				 const uint8_t *key, const uint8_t *nonce)
+int __weak fp_crypto_aes128_ctr_decrypt(uint8_t *out, const uint8_t *in, size_t data_len,
+					const uint8_t *key, const uint8_t *nonce)
 {
 	/* Due to properties of XOR function data encrypted twice is the same as initial data, so to
 	 * decrypt data it is sufficient to encrypt encrypted data.

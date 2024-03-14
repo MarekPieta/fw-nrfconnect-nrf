@@ -93,7 +93,7 @@ cleanup:
 	return err;
 }
 
-static psa_key_id_t import_aes128_key(const uint8_t *data)
+static psa_key_id_t import_aes128_key(const uint8_t *data, psa_algorithm_t alg)
 {
 	static const size_t len = FP_CRYPTO_AES128_KEY_LEN;
 
@@ -102,7 +102,7 @@ static psa_key_id_t import_aes128_key(const uint8_t *data)
 
 	psa_set_key_usage_flags(&key_attr, PSA_KEY_USAGE_ENCRYPT | PSA_KEY_USAGE_DECRYPT);
 	psa_set_key_lifetime(&key_attr, PSA_KEY_LIFETIME_VOLATILE);
-	psa_set_key_algorithm(&key_attr, PSA_ALG_ECB_NO_PADDING);
+	psa_set_key_algorithm(&key_attr, alg);
 	psa_set_key_type(&key_attr, PSA_KEY_TYPE_AES);
 	psa_set_key_bits(&key_attr, len * CHAR_BIT);
 
@@ -124,7 +124,7 @@ static int aes128_ecb_crypt(uint8_t *out, const uint8_t *in, const uint8_t *k, b
 	psa_key_id_t key_id;
 	psa_status_t status;
 
-	key_id = import_aes128_key(k);
+	key_id = import_aes128_key(k, PSA_ALG_ECB_NO_PADDING);
 	if (key_id == PSA_KEY_ID_NULL) {
 		LOG_ERR("import_aes128_key failed");
 		return -EIO;
@@ -163,6 +163,97 @@ int fp_crypto_aes128_ecb_encrypt(uint8_t *out, const uint8_t *in, const uint8_t 
 int fp_crypto_aes128_ecb_decrypt(uint8_t *out, const uint8_t *in, const uint8_t *k)
 {
 	return aes128_ecb_crypt(out, in, k, false);
+}
+
+static int aes128_ctr_crypt(uint8_t *out, const uint8_t *in, size_t data_len, const uint8_t *key,
+			    const uint8_t *nonce, bool encrypt)
+{
+	size_t block_cnt;
+	int err = 0;
+	size_t olen = 0;
+	uint8_t iv[FP_CRYPTO_AES128_BLOCK_LEN];
+	psa_key_id_t key_id;
+	psa_status_t status;
+	psa_cipher_operation_t operation = PSA_CIPHER_OPERATION_INIT;
+
+	if ((data_len % FP_CRYPTO_AES128_BLOCK_LEN) == 0) {
+		block_cnt = data_len / FP_CRYPTO_AES128_BLOCK_LEN;
+	} else {
+		block_cnt = (data_len / FP_CRYPTO_AES128_BLOCK_LEN) + 1;
+	}
+
+	key_id = import_aes128_key(key, PSA_ALG_CTR);
+	if (key_id == PSA_KEY_ID_NULL) {
+		LOG_ERR("import_aes128_key failed");
+		return -EIO;
+	}
+
+	if (encrypt) {
+		status = psa_cipher_encrypt_setup(&operation, key_id, PSA_ALG_CTR);
+	} else {
+		status = psa_cipher_decrypt_setup(&operation, key_id, PSA_ALG_CTR);
+	}
+
+	if (status != PSA_SUCCESS) {
+		LOG_ERR("psa_cipher_%scrypt_setup failed (err: %d)", encrypt ? "en" : "de", status);
+		err = -EIO;
+		goto cleanup;
+	}
+
+	memset(iv, 0x00, sizeof(iv));
+	memcpy(&iv[sizeof(iv) - FP_CRYPTO_ADDITIONAL_DATA_NONCE_LEN], nonce,
+	       FP_CRYPTO_ADDITIONAL_DATA_NONCE_LEN);
+
+	status = psa_cipher_set_iv(&operation, iv, sizeof(iv));
+	if (status != PSA_SUCCESS) {
+		LOG_ERR("psa_cipher_set_iv failed (err: %d)", status);
+		err = -EIO;
+		goto cleanup;
+	}
+
+	for (size_t i = 0; i < block_cnt; i++) {
+		size_t pos = block_cnt * FP_CRYPTO_AES128_BLOCK_LEN;
+		size_t block_len = MIN(FP_CRYPTO_AES128_BLOCK_LEN, data_len - pos);
+
+		status = psa_cipher_update(&operation,
+					   in + pos, block_len,
+					   out + pos, data_len - pos,
+					   &olen);
+		__ASSERT_NO_MSG(olen == block_len);
+
+		if (status != PSA_SUCCESS) {
+			LOG_ERR("psa_cipher_update failed (err: %d)", status);
+			err = -EIO;
+			goto cleanup;
+		}
+	}
+
+	status = psa_cipher_finish(&operation, out, 0, &olen);
+	if (status != PSA_SUCCESS) {
+		LOG_ERR("psa_finish_update failed (err: %d)", status);
+		err = -EIO;
+		goto cleanup;
+	}
+
+cleanup:
+	status = psa_destroy_key(key_id);
+	if (status != PSA_SUCCESS) {
+		LOG_ERR("psa_destroy_key failed (err: %d)", status);
+	}
+
+	return err;
+}
+
+int fp_crypto_aes128_ctr_encrypt(uint8_t *out, const uint8_t *in, size_t data_len,
+				 const uint8_t *key, const uint8_t *nonce)
+{
+	return aes128_ctr_crypt(out, in, data_len, key, nonce, true);
+}
+
+int fp_crypto_aes128_ctr_decrypt(uint8_t *out, const uint8_t *in, size_t data_len,
+				 const uint8_t *key, const uint8_t *nonce)
+{
+	return aes128_ctr_crypt(out, in, data_len, key, nonce, false);
 }
 
 static psa_key_id_t import_ecdh_priv_key(const uint8_t *data)
