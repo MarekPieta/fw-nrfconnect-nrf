@@ -93,8 +93,8 @@ size_t fp_crypto_account_key_filter_size(size_t n)
 	}
 }
 
-int fp_crypto_account_key_filter(uint8_t *out, const struct fp_account_key *account_key_list,
-				 size_t n, uint16_t salt, const uint8_t *battery_info)
+int __weak fp_crypto_account_key_filter(uint8_t *out, const struct fp_account_key *account_key_list,
+					size_t n, uint16_t salt, const uint8_t *battery_info)
 {
 	size_t s = fp_crypto_account_key_filter_size(n);
 	uint8_t v[FP_ACCOUNT_KEY_LEN + sizeof(salt) + FP_CRYPTO_BATTERY_INFO_LEN];

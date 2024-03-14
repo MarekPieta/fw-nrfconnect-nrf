@@ -23,5 +23,15 @@ if(CONFIG_BT_FAST_PAIR_CRYPTO_NRF_SECURITY)
   target_sources(fp_crypto PRIVATE fp_crypto_nrf_security.c)
 endif()
 
+if(CONFIG_BUILD_WITH_TFM)
+  add_subdirectory(tfm_rot)
+  target_include_directories(fp_crypto PRIVATE
+    $<TARGET_PROPERTY:tfm,TFM_BINARY_DIR>/api_ns/interface/include
+  )
+  target_compile_definitions(fp_crypto
+    PRIVATE TFM_PARTITION_SECURE_PERIPHERAL_PARTITION
+  )
+endif()
+
 target_include_directories(fp_crypto PUBLIC include)
 target_include_directories(fp_crypto PUBLIC ../include/common)

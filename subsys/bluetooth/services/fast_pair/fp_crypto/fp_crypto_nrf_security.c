@@ -14,6 +14,11 @@ LOG_MODULE_DECLARE(fp_crypto, CONFIG_FP_CRYPTO_LOG_LEVEL);
 
 #include "fp_crypto.h"
 
+#include <tfm_ns_interface.h>
+//#include "secure_peripheral_partition.h"
+#include "psa/client.h"
+#include "psa_manifest/sid.h"
+
 
 int fp_crypto_sha256(uint8_t *out, const uint8_t *in, size_t data_len)
 {
@@ -30,6 +35,32 @@ int fp_crypto_sha256(uint8_t *out, const uint8_t *in, size_t data_len)
 		LOG_ERR("Invalid psa_hash_compute output len: %zu", hash_len);
 		return -EIO;
 	}
+
+	return 0;
+}
+
+int fp_crypto_account_key_filter(uint8_t *out, const struct fp_account_key *account_key_list,
+				 size_t n, uint16_t salt, const uint8_t *battery_info)
+
+{
+	psa_status_t status;
+	psa_handle_t handle = TFM_FAST_PAIR_BLOOM_FILTER_HANDLE;
+
+
+	psa_invec in_vec[] = {
+		{.base = account_key_list, .len = n * sizeof(struct fp_account_key)},
+		{.base = &salt, .len = sizeof(salt)},
+		{.base = battery_info,
+		 .len = (battery_info == NULL) ? 0 : FP_CRYPTO_BATTERY_INFO_LEN},
+	};
+
+	psa_outvec out_vec[] = {
+		{.base = out, .len = fp_crypto_account_key_filter_size(n)},
+	};
+
+	status = psa_call(handle, PSA_IPC_CALL,
+			  in_vec, IOVEC_LEN(in_vec),
+			  out_vec, IOVEC_LEN(out_vec));
 
 	return 0;
 }
