@@ -6,6 +6,36 @@
 
 menu "Utilities"
 
+config DESKTOP_HID_REPORTQ
+	bool "Enable HID report queue utility"
+	help
+	  The HID report queue utility can be used to enqueue HID input reports.
+	  The queue among others simplifies integrating new modules that handle
+	  receiving HID input reports from peripherals on dongles.
+
+if DESKTOP_HID_REPORTQ
+
+config DESKTOP_HID_REPORTQ_MAX_ENQUEUED_REPORTS
+	int "Enqueued reports limit"
+	range 1 1024
+	default 2
+	help
+	  Maximum number of enqueued HID report events is limited to cap memory
+	  usage. The limit is defined separately for every HID input report ID.
+
+config DESKTOP_HID_REPORTQ_QUEUE_COUNT
+	int "Number of suppored HID report queues"
+	range 1 1024
+	default 1
+	help
+	  Maximum number of HID report queues that can be simultaneuosly in use.
+
+module = DESKTOP_HID_REPORTQ
+module-str = HID report queue
+source "subsys/logging/Kconfig.template.log_config"
+
+endif
+
 config DESKTOP_HWID
 	bool "Hardware ID module"
 	select HWINFO
