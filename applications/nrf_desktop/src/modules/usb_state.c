@@ -4,11 +4,16 @@
  * SPDX-License-Identifier: LicenseRef-Nordic-5-Clause
  */
 #include <stdio.h>
+#include <stdint.h>
 
+#include <zephyr/device.h>
+#include <zephyr/sys/iterable_sections.h>
 #include <zephyr/types.h>
 #include <zephyr/sys/byteorder.h>
 #include <zephyr/sys/util.h>
 
+#include <zephyr/usb/usbd.h>
+#include <zephyr/usb/usbd_msg.h>
 #include <zephyr/usb/usb_device.h>
 #include <zephyr/usb/usb_ch9.h>
 #include <zephyr/usb/class/usb_hid.h>
@@ -48,6 +53,14 @@ LOG_MODULE_REGISTER(MODULE, CONFIG_DESKTOP_USB_STATE_LOG_LEVEL);
   #error Too few USB IN Endpoints enabled. Modify dts.overlay file.
 #endif
 
+/* Not used for USB next stack. */
+#ifndef CONFIG_USB_HID_DEVICE_NAME
+	#define CONFIG_USB_HID_DEVICE_NAME ""
+#endif
+#ifndef CONFIG_DESKTOP_USB_HID_PROTOCOL_CODE
+	#define CONFIG_DESKTOP_USB_HID_PROTOCOL_CODE -2
+#endif
+
 struct usb_hid_device {
 	const struct device *dev;
 	uint32_t report_bm;
@@ -59,7 +72,19 @@ struct usb_hid_device {
 
 
 static enum usb_state state;
+
+#define USB_NEXT_USB_HID_DEVICE_INIT(node_id)	\
+{						\
+	.dev = DEVICE_DT_GET(node_id),		\
+},
+
+#if CONFIG_DESKTOP_USB_NEXT
+static struct usb_hid_device usb_hid_device[] = {
+	DT_FOREACH_STATUS_OKAY(zephyr_hid_device, USB_NEXT_USB_HID_DEVICE_INIT)
+};
+#else
 static struct usb_hid_device usb_hid_device[CONFIG_USB_HID_DEVICE_COUNT];
+#endif
 
 static struct config_channel_transport cfg_chan_transport;
 
@@ -233,7 +258,11 @@ static void report_sent(const struct device *dev, bool error)
 {
 	struct usb_hid_device *usb_hid = dev_to_hid(dev);
 
-	__ASSERT_NO_MSG(usb_hid->sent_report_id != REPORT_ID_COUNT);
+	/* TODO: Improve. */
+	if (usb_hid->sent_report_id == REPORT_ID_COUNT) {
+		LOG_WRN("No HID report to be sent");
+		return;
+	}
 
 	struct hid_report_sent_event *event = new_hid_report_sent_event();
 
@@ -449,7 +478,402 @@ static void broadcast_subscription_change(struct usb_hid_device *usb_hid)
 	}
 }
 
-static void device_status(enum usb_dc_status_code cb_status, const uint8_t *param)
+static void protocol_change(const struct device *dev, uint8_t protocol)
+{
+	struct usb_hid_device *usb_hid = dev_to_hid(dev);
+
+	BUILD_ASSERT(IS_ENABLED(CONFIG_DESKTOP_USB_NEXT) ||
+		     (IS_ENABLED(CONFIG_DESKTOP_HID_BOOT_INTERFACE_DISABLED) ==
+		      !IS_ENABLED(CONFIG_USB_HID_BOOT_PROTOCOL)),
+		     "Boot protocol setup inconsistency");
+	BUILD_ASSERT(IS_ENABLED(CONFIG_DESKTOP_USB_NEXT) ||
+		     (IS_ENABLED(CONFIG_DESKTOP_HID_BOOT_INTERFACE_KEYBOARD) ==
+		      ((IS_ENABLED(CONFIG_USB_HID_BOOT_PROTOCOL) &&
+		       (CONFIG_DESKTOP_USB_HID_PROTOCOL_CODE == 1)))),
+		    "Boot protocol code does not reflect selected interface");
+	BUILD_ASSERT(IS_ENABLED(CONFIG_DESKTOP_USB_NEXT) ||
+		     (IS_ENABLED(CONFIG_DESKTOP_HID_BOOT_INTERFACE_MOUSE) ==
+		      ((IS_ENABLED(CONFIG_USB_HID_BOOT_PROTOCOL) &&
+		       (CONFIG_DESKTOP_USB_HID_PROTOCOL_CODE == 2)))),
+		    "Boot protocol code does not reflect selected interface");
+
+	if ((protocol != HID_PROTOCOL_BOOT) &&
+	    (protocol != HID_PROTOCOL_REPORT)) {
+		__ASSERT_NO_MSG(false);
+		return;
+	}
+
+	if (IS_ENABLED(CONFIG_DESKTOP_HID_BOOT_INTERFACE_DISABLED) &&
+	    (protocol == HID_PROTOCOL_BOOT)) {
+		LOG_WRN("BOOT protocol is not supported");
+		return;
+	}
+
+	usb_hid->hid_protocol = protocol;
+
+	if (state == USB_STATE_ACTIVE) {
+		broadcast_subscription_change(usb_hid);
+	}
+}
+
+static void usb_wakeup(void)
+{
+	int err = usb_wakeup_request();
+
+	if (!err) {
+		LOG_INF("USB wakeup requested");
+	} else if (err == -EAGAIN) {
+		/* Already woken up - waiting for host */
+		LOG_WRN("USB wakeup pending");
+	} else if (err == -EACCES) {
+		LOG_INF("USB wakeup was not enabled by the host");
+	} else {
+		LOG_ERR("USB wakeup request failed (err:%d)", err);
+	}
+}
+
+static uint32_t get_report_bm(size_t hid_id)
+{
+	BUILD_ASSERT(REPORT_ID_COUNT <=
+		     sizeof(usb_hid_device[0].report_bm) * CHAR_BIT);
+#if CONFIG_DESKTOP_USB_SELECTIVE_REPORT_SUBSCRIPTION
+	BUILD_ASSERT(ARRAY_SIZE(usb_hid_report_bm) ==
+		     ARRAY_SIZE(usb_hid_device));
+	return usb_hid_report_bm[hid_id];
+#else
+	return UINT32_MAX;
+#endif
+}
+
+static void verify_report_bm(void)
+{
+#if defined(CONFIG_DESKTOP_USB_SELECTIVE_REPORT_SUBSCRIPTION) && defined(CONFIG_ASSERT)
+	/* Make sure that selected reports bitmasks are proper. */
+	uint32_t common_bitmask = 0;
+
+	for (size_t i = 0; i < ARRAY_SIZE(usb_hid_device); i++) {
+		/* USB HID instance that does not subscribe to any report
+		 * should be removed. On nRF Desktop peripheral device, given
+		 * HID report can be handled only by one USB HID instance.
+		 */
+		__ASSERT_NO_MSG(usb_hid_report_bm[i] != 0);
+		__ASSERT_NO_MSG((common_bitmask & usb_hid_report_bm[i]) == 0);
+		common_bitmask |= usb_hid_report_bm[i];
+	}
+#endif
+}
+
+static void broadcast_usb_state_change(enum usb_state new_state)
+{
+	if (new_state != state) {
+		enum usb_state old_state = state;
+
+		state = new_state;
+
+		if (old_state == USB_STATE_ACTIVE) {
+			for (size_t i = 0; i < ARRAY_SIZE(usb_hid_device); i++) {
+				broadcast_subscription_change(&usb_hid_device[i]);
+				reset_pending_report(&usb_hid_device[i]);
+			}
+		}
+
+		if (new_state == USB_STATE_DISCONNECTED) {
+			for (size_t i = 0; i < ARRAY_SIZE(usb_hid_device); i++) {
+				broadcast_usb_hid(&usb_hid_device[i], false);
+			}
+		}
+
+		broadcast_usb_state();
+
+		if (new_state == USB_STATE_ACTIVE) {
+			for (size_t i = 0; i < ARRAY_SIZE(usb_hid_device); i++) {
+				broadcast_usb_hid(&usb_hid_device[i], true);
+				usb_hid_device[0].hid_protocol = HID_PROTOCOL_REPORT;
+				broadcast_subscription_change(&usb_hid_device[i]);
+			}
+		}
+
+		if (IS_ENABLED(CONFIG_DESKTOP_CONFIG_CHANNEL_ENABLE) &&
+		    new_state != USB_STATE_ACTIVE) {
+			config_channel_transport_disconnect(&cfg_chan_transport);
+		}
+	}
+}
+
+static int usb_init_hid_device_legacy_api(const struct device *dev, size_t idx)
+{
+	static const struct hid_ops hid_ops = {
+		.get_report = get_report,
+		.set_report = set_report,
+		.int_in_ready = report_sent_cb,
+		.protocol_change = protocol_change,
+	};
+
+	if (!dev) {
+		LOG_ERR("No device");
+		return -ENXIO;
+	}
+
+	struct usb_hid_device *usb_hid_dev = &usb_hid_device[idx];
+
+	usb_hid_dev->dev = dev;
+	usb_hid_dev->hid_protocol = HID_PROTOCOL_REPORT;
+	usb_hid_dev->sent_report_id = REPORT_ID_COUNT;
+	usb_hid_dev->report_bm = get_report_bm(idx);
+
+	usb_hid_register_device(dev, hid_report_desc, hid_report_desc_size, &hid_ops);
+	int err = usb_hid_init(dev);
+
+	if (err) {
+		LOG_ERR("usb_hid_init failed (err: %d)", err);
+		return err;
+	}
+
+	return 0;
+}
+
+static void usb_init_next_status_cb(const struct usbd_msg *const msg)
+{
+	static enum usb_state before_suspend;
+	enum usb_state new_state = state;
+
+	LOG_INF("USBD msg: %s", usbd_msg_type_string(msg->type));
+
+	switch (msg->type) {
+	case USBD_MSG_VBUS_READY:
+		if (state != USB_STATE_DISCONNECTED) {
+			LOG_WRN("USBD_MSG_VBUS_READY while USB is not disconnected");
+		}
+		/* TODO: Currently we go straigth into active state. Needs to be improved. */
+		new_state = USB_STATE_ACTIVE;
+		break;
+
+        case USBD_MSG_VBUS_REMOVED:
+		new_state = USB_STATE_DISCONNECTED;
+		break;
+
+	case USBD_MSG_RESUME:
+		if (state == USB_STATE_SUSPENDED) {
+			new_state = before_suspend;
+			LOG_WRN("USB resume");
+		}
+		break;
+
+	case USBD_MSG_SUSPEND:
+		before_suspend = state;
+		new_state = USB_STATE_SUSPENDED;
+		LOG_WRN("USB suspend");
+		break;
+
+	case USBD_MSG_RESET:
+		/* TODO: Currently we go straigth into active state. Needs to be improved. */
+		new_state = USB_STATE_ACTIVE;
+		break;
+
+	case USBD_MSG_UDC_ERROR:
+		LOG_ERR("Non-correctable UDC error message");
+		break;
+
+	case USBD_MSG_STACK_ERROR:
+		LOG_ERR("Unrecoverable USB device stack error");
+		module_set_state(MODULE_STATE_ERROR);
+		break;
+
+	default:
+		LOG_ERR("Unexpected USB device message type: %d", msg->type);
+		break;
+	}
+
+	broadcast_usb_state_change(new_state);
+}
+
+static int usb_init_next_register_fs_classes(struct usbd_contex *usbd)
+{
+	int err = 0;
+
+	STRUCT_SECTION_FOREACH_ALTERNATE(usbd_class_fs, usbd_class_node, c_nd) {
+		err = usbd_register_class(usbd, c_nd->c_data->name, USBD_SPEED_FS, 1);
+		if (err) {
+			LOG_ERR("usbd_register_class failed for %s (err: %d)",
+				c_nd->c_data->name, err);
+			return err;
+		}
+	}
+
+	return err;
+}
+
+static int usb_init_next_register_hs_classes(struct usbd_contex *usbd)
+{
+	int err = 0;
+
+	STRUCT_SECTION_FOREACH_ALTERNATE(usbd_class_hs, usbd_class_node, c_nd) {
+		err = usbd_register_class(usbd, c_nd->c_data->name, USBD_SPEED_HS, 1);
+		if (err) {
+			LOG_ERR("usbd_register_class failed for %s (err: %d)",
+				c_nd->c_data->name, err);
+			return err;
+		}
+	}
+
+	return err;
+}
+
+static int usb_init_next_add_configuration(struct usbd_contex *usbd,
+					   const enum usbd_speed speed,
+					   struct usbd_config_node *config)
+{
+	int err;
+
+	err = usbd_add_configuration(usbd, speed, config);
+	if (err) {
+		LOG_ERR("usbd_add_configuration failed (err: %d)", err);
+		return err;
+	}
+
+	if (speed == USBD_SPEED_FS) {
+		err = usb_init_next_register_fs_classes(usbd);
+	} else if (speed == USBD_SPEED_HS) {
+		err = usb_init_next_register_hs_classes(usbd);
+	}
+
+	if (err) {
+		return err;
+	}
+
+	/* Always use class code information from Interface Descriptors */
+	if (IS_ENABLED(CONFIG_USBD_CDC_ACM_CLASS) ||
+	    IS_ENABLED(CONFIG_USBD_CDC_ECM_CLASS) ||
+	    IS_ENABLED(CONFIG_USBD_AUDIO2_CLASS)) {
+		/*
+		 * Class with multiple interfaces have an Interface
+		 * Association Descriptor available, use an appropriate triple
+		 * to indicate it.
+		 */
+		usbd_device_set_code_triple(usbd, speed,
+					    USB_BCC_MISCELLANEOUS, 0x02, 0x01);
+	} else {
+		usbd_device_set_code_triple(usbd, speed, 0, 0, 0);
+	}
+
+	return 0;
+}
+
+static int usb_init_next_hids_init(void)
+{
+	int err = 0;
+
+	for (size_t i = 0; i < ARRAY_SIZE(usb_hid_device); i++) {
+		err = usb_init_hid_device_legacy_api(usb_hid_device[i].dev, i);
+
+		if (err) {
+			LOG_ERR("usb_init_hid_device_legacy_api failed (err: %d)", err);
+			break;
+		}
+	}
+
+	return err;
+}
+
+static struct usbd_contex *usb_init_next_usbd_init(usbd_msg_cb_t msg_cb)
+{
+	int err;
+
+	USBD_DEVICE_DEFINE(usbd, DEVICE_DT_GET(DT_NODELABEL(usbd)),
+			   CONFIG_DESKTOP_DEVICE_VID, CONFIG_DESKTOP_DEVICE_PID);
+
+	USBD_DESC_LANG_DEFINE(lang);
+	USBD_DESC_MANUFACTURER_DEFINE(manufacturer, CONFIG_DESKTOP_DEVICE_MANUFACTURER);
+	USBD_DESC_PRODUCT_DEFINE(product, CONFIG_DESKTOP_DEVICE_PRODUCT);
+	/* TODO: Improve. So far we use a hardcoded serial number. */
+	USBD_DESC_SERIAL_NUMBER_DEFINE(serial_number, "0123456789ABCDEF");
+
+	/* TODO improve, so far hardcoded to self powered and no remote wakeup support. */
+	static const uint8_t attributes = USB_SCD_SELF_POWERED;
+
+	/* TODO improve, so far hardcoded max power value. */
+	USBD_CONFIGURATION_DEFINE(fs_config, attributes, 125);
+	USBD_CONFIGURATION_DEFINE(hs_config, attributes, 125);
+
+	err = usbd_add_descriptor(&usbd, &lang);
+	if (err) {
+		LOG_ERR("usbd_add_descriptor(lang) failed (err: %d)", err);
+		return NULL;
+	}
+
+	err = usbd_add_descriptor(&usbd, &manufacturer);
+	if (err) {
+		LOG_ERR("usbd_add_descriptor(manufacturer) failed (err: %d)", err);
+		return NULL;
+	}
+
+	err = usbd_add_descriptor(&usbd, &product);
+	if (err) {
+		LOG_ERR("usbd_add_descriptor(product) failed (err: %d)", err);
+		return NULL;
+	}
+
+	err = usbd_add_descriptor(&usbd, &serial_number);
+	if (err) {
+		LOG_ERR("usbd_add_descriptor(serial_number) failed (err: %d)", err);
+		return NULL;
+	}
+
+	if (usbd_caps_speed(&usbd) == USBD_SPEED_HS) {
+		err = usb_init_next_add_configuration(&usbd, USBD_SPEED_HS, &hs_config);
+		if (err) {
+			LOG_ERR("usb_init_next_add_configuration failed (err: %d)", err);
+			return NULL;
+		}
+	}
+
+	err = usb_init_next_add_configuration(&usbd, USBD_SPEED_FS, &fs_config);
+	if (err) {
+		LOG_ERR("usb_init_next_add_configuration failed (err: %d)", err);
+		return NULL;
+	}
+
+	err = usbd_init(&usbd);
+	if (err) {
+		LOG_ERR("usbd_init (err: %d)", err);
+		return NULL;
+	}
+
+	return &usbd;
+}
+
+static int usb_init_next(void)
+{
+	int err = usb_init_next_hids_init();
+
+	if (err) {
+		LOG_ERR("usb_init_next_hids_init failed (err: %d)", err);
+		return err;
+	}
+
+	struct usbd_contex *usbd = usb_init_next_usbd_init(NULL);
+
+	if (!usbd) {
+		LOG_ERR("usb_init_next_hids_init failed (err: %d)", err);
+		return -ENXIO;
+	}
+
+	err = usbd_msg_register_cb(usbd, usb_init_next_status_cb);
+	if (err) {
+		LOG_ERR("usbd_msg_register_cb failed (err: %d)", err);
+		return err;
+	}
+
+	err = usbd_enable(usbd);
+	if (err) {
+		LOG_ERR("usbd_enable failed (err: %d)", err);
+		return err;
+	}
+
+	return 0;
+}
+
+static void usb_init_legacy_status_cb(enum usb_dc_status_code cb_status, const uint8_t *param)
 {
 	static enum usb_state before_suspend;
 	enum usb_state new_state = state;
@@ -513,175 +937,75 @@ static void device_status(enum usb_dc_status_code cb_status, const uint8_t *para
 		break;
 	}
 
-	if (new_state != state) {
-		enum usb_state old_state = state;
-
-		state = new_state;
-
-		if (old_state == USB_STATE_ACTIVE) {
-			for (size_t i = 0; i < ARRAY_SIZE(usb_hid_device); i++) {
-				broadcast_subscription_change(&usb_hid_device[i]);
-				reset_pending_report(&usb_hid_device[i]);
-			}
-		}
-
-		if (new_state == USB_STATE_DISCONNECTED) {
-			for (size_t i = 0; i < ARRAY_SIZE(usb_hid_device); i++) {
-				broadcast_usb_hid(&usb_hid_device[i], false);
-			}
-		}
-
-		broadcast_usb_state();
-
-		if (new_state == USB_STATE_ACTIVE) {
-			for (size_t i = 0; i < ARRAY_SIZE(usb_hid_device); i++) {
-				broadcast_usb_hid(&usb_hid_device[i], true);
-				usb_hid_device[0].hid_protocol = HID_PROTOCOL_REPORT;
-				broadcast_subscription_change(&usb_hid_device[i]);
-			}
-		}
-
-		if (IS_ENABLED(CONFIG_DESKTOP_CONFIG_CHANNEL_ENABLE) &&
-		    new_state != USB_STATE_ACTIVE) {
-			config_channel_transport_disconnect(&cfg_chan_transport);
-		}
-	}
+	broadcast_usb_state_change(new_state);
 }
 
-static void protocol_change(const struct device *dev, uint8_t protocol)
+static int usb_init_legacy_hids_init(void)
 {
-	struct usb_hid_device *usb_hid = dev_to_hid(dev);
+	int err = 0;
 
-	BUILD_ASSERT(IS_ENABLED(CONFIG_DESKTOP_HID_BOOT_INTERFACE_DISABLED) ==
-		      !IS_ENABLED(CONFIG_USB_HID_BOOT_PROTOCOL),
-		     "Boot protocol setup inconsistency");
-	BUILD_ASSERT(IS_ENABLED(CONFIG_DESKTOP_HID_BOOT_INTERFACE_KEYBOARD) ==
-		     ((IS_ENABLED(CONFIG_USB_HID_BOOT_PROTOCOL) &&
-		      (CONFIG_DESKTOP_USB_HID_PROTOCOL_CODE == 1))),
-		    "Boot protocol code does not reflect selected interface");
-	BUILD_ASSERT(IS_ENABLED(CONFIG_DESKTOP_HID_BOOT_INTERFACE_MOUSE) ==
-		     ((IS_ENABLED(CONFIG_USB_HID_BOOT_PROTOCOL) &&
-		      (CONFIG_DESKTOP_USB_HID_PROTOCOL_CODE == 2))),
-		    "Boot protocol code does not reflect selected interface");
-
-	if ((protocol != HID_PROTOCOL_BOOT) &&
-	    (protocol != HID_PROTOCOL_REPORT)) {
-		__ASSERT_NO_MSG(false);
-		return;
-	}
-
-	if (IS_ENABLED(CONFIG_DESKTOP_HID_BOOT_INTERFACE_DISABLED) &&
-	    (protocol == HID_PROTOCOL_BOOT)) {
-		LOG_WRN("BOOT protocol is not supported");
-		return;
-	}
-
-	usb_hid->hid_protocol = protocol;
-
-	if (state == USB_STATE_ACTIVE) {
-		broadcast_subscription_change(usb_hid);
-	}
-}
-
-static void usb_wakeup(void)
-{
-	int err = usb_wakeup_request();
-
-	if (!err) {
-		LOG_INF("USB wakeup requested");
-	} else if (err == -EAGAIN) {
-		/* Already woken up - waiting for host */
-		LOG_WRN("USB wakeup pending");
-	} else if (err == -EACCES) {
-		LOG_INF("USB wakeup was not enabled by the host");
-	} else {
-		LOG_ERR("USB wakeup request failed (err:%d)", err);
-	}
-}
-
-static uint32_t get_report_bm(size_t hid_id)
-{
-	BUILD_ASSERT(REPORT_ID_COUNT <=
-		     sizeof(usb_hid_device[0].report_bm) * CHAR_BIT);
-#if CONFIG_DESKTOP_USB_SELECTIVE_REPORT_SUBSCRIPTION
-	BUILD_ASSERT(ARRAY_SIZE(usb_hid_report_bm) ==
-		     CONFIG_USB_HID_DEVICE_COUNT);
-	return usb_hid_report_bm[hid_id];
-#else
-	return UINT32_MAX;
-#endif
-}
-
-static void verify_report_bm(void)
-{
-#if defined(CONFIG_DESKTOP_USB_SELECTIVE_REPORT_SUBSCRIPTION) && defined(CONFIG_ASSERT)
-	/* Make sure that selected reports bitmasks are proper. */
-	uint32_t common_bitmask = 0;
-
-	for (size_t i = 0; i < CONFIG_USB_HID_DEVICE_COUNT; i++) {
-		/* USB HID instance that does not subscribe to any report
-		 * should be removed. On nRF Desktop peripheral device, given
-		 * HID report can be handled only by one USB HID instance.
-		 */
-		__ASSERT_NO_MSG(usb_hid_report_bm[i] != 0);
-		__ASSERT_NO_MSG((common_bitmask & usb_hid_report_bm[i]) == 0);
-		common_bitmask |= usb_hid_report_bm[i];
-	}
-#endif
-}
-
-static int usb_init(void)
-{
-	static const struct hid_ops hid_ops = {
-		.get_report = get_report,
-		.set_report = set_report,
-		.int_in_ready = report_sent_cb,
-		.protocol_change = protocol_change,
-	};
-
-	verify_report_bm();
-
-	for (size_t i = 0; i < CONFIG_USB_HID_DEVICE_COUNT; i++) {
+	for (size_t i = 0; i < ARRAY_SIZE(usb_hid_device); i++) {
 		char name[32];
-		int err = snprintf(name, sizeof(name), CONFIG_USB_HID_DEVICE_NAME "_%d", i);
 
+		err = snprintf(name, sizeof(name), CONFIG_USB_HID_DEVICE_NAME "_%d", i);
 		if ((err < 0) || (err >= sizeof(name))) {
-			LOG_ERR("Cannot initialize HID device name");
+			LOG_ERR("HID dev name snprintf failed (err: %d)", err);
 			return err;
 		}
-		usb_hid_device[i].dev = device_get_binding(name);
-		if (usb_hid_device[i].dev == NULL) {
-			return -ENXIO;
+
+		err = usb_init_hid_device_legacy_api(device_get_binding(name), i);
+		if (err) {
+			LOG_ERR("usb_init_hid_device_legacy_api failed for %zu (err: %d)", i, err);
+			return err;
 		}
 
-		usb_hid_device[i].hid_protocol = HID_PROTOCOL_REPORT;
-		usb_hid_device[i].sent_report_id = REPORT_ID_COUNT;
-		usb_hid_device[i].report_bm = get_report_bm(i);
-
-		usb_hid_register_device(usb_hid_device[i].dev, hid_report_desc,
-					hid_report_desc_size, &hid_ops);
-
+		/* Legacy way of setting HID boot protocol requires an additional API call. */
 		if (IS_ENABLED(CONFIG_USB_HID_BOOT_PROTOCOL)) {
 			err = usb_hid_set_proto_code(usb_hid_device[i].dev,
 						     CONFIG_DESKTOP_USB_HID_PROTOCOL_CODE);
 			if (err) {
-				LOG_ERR("Cannot set USB HID boot protocol code (err:%d)", err);
+				LOG_ERR("usb_hid_set_proto_code failed for %zu (err: %d)", i, err);
 				return err;
 			}
 		}
-
-		err = usb_hid_init(usb_hid_device[i].dev);
-		if (err) {
-			LOG_ERR("Cannot initialize HID class");
-			return err;
-		}
 	}
+
+	return err;
+}
+
+static int usb_init_legacy(void)
+{
+	int err = usb_init_legacy_hids_init();
+
+	if (err) {
+		LOG_ERR("usb_init_legacy_hids_init failed (err: %d)", err);
+		return err;
+	}
+
+	err = usb_enable(usb_init_legacy_status_cb);
+	if (err) {
+		LOG_ERR("usb_enable failed (err: %d)", err);
+		return err;
+	}
+
+	return 0;
+}
+
+static int usb_init(void)
+{
+	int err = 0;
+
+	verify_report_bm();
 
 	if (IS_ENABLED(CONFIG_DESKTOP_CONFIG_CHANNEL_ENABLE)) {
 		config_channel_transport_init(&cfg_chan_transport);
 	}
 
-	int err = usb_enable(device_status);
+	if (IS_ENABLED(CONFIG_DESKTOP_USB_NEXT)) {
+		err = usb_init_next();
+	} else {
+		err = usb_init_legacy();
+	}
 
 	if (err) {
 		LOG_ERR("Cannot enable USB (err: %d)", err);
@@ -708,7 +1032,7 @@ static bool app_event_handler(const struct app_event_header *aeh)
 			initialized = true;
 
 			if (usb_init()) {
-				LOG_ERR("Cannot initialize");
+				LOG_ERR("USB stack initialization failed");
 				module_set_state(MODULE_STATE_ERROR);
 			} else {
 				module_set_state(MODULE_STATE_READY);
