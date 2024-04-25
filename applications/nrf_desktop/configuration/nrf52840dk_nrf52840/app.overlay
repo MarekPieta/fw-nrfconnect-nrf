@@ -145,3 +145,13 @@
 		};
 	};
 };
+
+/ {
+	hid_dev_0: hid_dev_0 {
+		compatible = "zephyr,hid-device";
+		interface-name = "HID0";
+		protocol-code = "none";
+		in-polling-rate = <1000>;
+		in-report-size = <64>;
+	};
+};
