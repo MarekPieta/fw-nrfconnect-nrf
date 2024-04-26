@@ -104,6 +104,14 @@ config DESKTOP_MOTION_SIMULATED_SCALE_FACTOR
 	  The simulated movement data will be tracing predefined path, an eight-sided polygon.
 	  This option defines scale factor for tracked polygon size.
 
+config DESKTOP_MOTION_SIMULATED_BUSY_WAIT_US
+	int "Busy wait time while generating motion [us]"
+	depends on DESKTOP_MOTION_SIMULATED_ENABLE
+	range 0 1000000
+	default 0
+	help
+	  Busy wait every time before generating motion to simulate sensor sampling delay.
+
 config DESKTOP_MOTION_SENSOR_THREAD_STACK_SIZE
 	int "Motion module thread stack size"
 	depends on DESKTOP_MOTION_SENSOR_ENABLE

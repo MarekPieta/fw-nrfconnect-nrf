@@ -87,6 +87,10 @@ static void generate_motion_event(void)
 	BUILD_ASSERT((edge_time & (edge_time - 1)) == 0,
 			 "Edge time must be power of 2");
 
+	if (CONFIG_DESKTOP_MOTION_SIMULATED_BUSY_WAIT_US > 0) {
+		k_busy_wait(CONFIG_DESKTOP_MOTION_SIMULATED_BUSY_WAIT_US);
+	}
+
 	uint64_t t = get_timestamp();
 	size_t v1_id = (t / edge_time) % ARRAY_SIZE(coords);
 	size_t v2_id = (v1_id + 1) % ARRAY_SIZE(coords);
