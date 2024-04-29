@@ -9,6 +9,7 @@ menu "BLE HID Client"
 config DESKTOP_HID_FORWARD_ENABLE
 	bool "Enable HID forward"
 	select BT_HOGP
+	select DESKTOP_HID_REPORTQ
 	depends on DESKTOP_ROLE_HID_DONGLE
 	depends on DESKTOP_BT_CENTRAL
 	help

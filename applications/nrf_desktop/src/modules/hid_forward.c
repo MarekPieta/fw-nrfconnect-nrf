@@ -38,21 +38,6 @@ LOG_MODULE_REGISTER(MODULE, CONFIG_DESKTOP_HID_FORWARD_LOG_LEVEL);
 
 BUILD_ASSERT(CFG_CHAN_MAX_RSP_POLL_CNT <= UCHAR_MAX);
 
-struct enqueued_report {
-	sys_snode_t node;
-	struct hid_report_event *report;
-};
-
-struct counted_list {
-	sys_slist_t list;
-	size_t count;
-};
-
-struct enqueued_reports {
-	struct counted_list reports[ARRAY_SIZE(input_reports)];
-	uint8_t last_idx;
-};
-
 struct report_data {
 	uint8_t report_id;
 	uint8_t data[OUTPUT_REPORT_DATA_MAX_LEN];
@@ -60,8 +45,7 @@ struct report_data {
 
 struct subscriber {
 	const void *id;
-	uint32_t enabled_reports_bm;
-	struct enqueued_reports enqueued_reports;
+	struct hid_reportq *in_reportq;
 	struct report_data out_reports[ARRAY_SIZE(output_reports)];
 	uint32_t saved_out_reports_bm;
 	uint8_t report_max;
@@ -168,22 +152,6 @@ static struct subscriber *get_subscriber(const struct hids_peripheral *per)
 {
 	__ASSERT_NO_MSG(per->sub_id < ARRAY_SIZE(subscribers));
 	return &subscribers[per->sub_id];
-}
-
-static size_t next_id(size_t id, size_t max)
-{
-	return (id + 1) % max;
-}
-
-static int get_input_report_idx(uint8_t report_id)
-{
-	for (size_t i = 0; i < ARRAY_SIZE(input_reports); i++) {
-		if (input_reports[i] == report_id) {
-			return i;
-		}
-	}
-
-	return -ENOENT;
 }
 
 static size_t get_output_report_idx(uint8_t report_id)
@@ -320,16 +288,12 @@ static void forward_hid_report(struct hids_peripheral *per, uint8_t report_id,
 			       const uint8_t *data, size_t size)
 {
 	struct subscriber *sub = get_subscriber(per);
+	int err = hid_reportq_report_add(sub->q, report_id, data, size);
 
-	if (report_id >= __CHAR_BIT__ * sizeof(sub->enabled_reports_bm)) {
-		__ASSERT_NO_MSG(false);
-		return;
-	}
-
-	int irep_idx = get_input_report_idx(report_id);
-
-	if (irep_idx < 0) {
-		LOG_ERR("Unsupported report id %" PRIu8, report_id);
+	if (err == -EACCES) {
+		/* Subscriber has not subscribed for the report. */
+	} else if (err) {
+		LOG_ERR("hid_reportq_report_add failed (err: %d)", err);
 		return;
 	}
 
@@ -415,8 +379,8 @@ static bool is_peripheral_connected(struct hids_peripheral *per)
 
 static enum bt_hids_pm get_sub_protocol_mode(const struct subscriber *sub)
 {
-	if (is_report_enabled(sub, REPORT_ID_BOOT_MOUSE) ||
-	    is_report_enabled(sub, REPORT_ID_BOOT_KEYBOARD)) {
+	if (hid_reportq_is_subscribed(sub->in_reportq, REPORT_ID_BOOT_MOUSE) ||
+	    hid_reportq_is_subscribed(sub->in_reportq, REPORT_ID_BOOT_KEYBOARD)) {
 		return BT_HIDS_PM_BOOT;
 	} else {
 		return BT_HIDS_PM_REPORT;
@@ -962,25 +926,19 @@ static void disconnect_peripheral(struct hids_peripheral *per)
 
 static void enable_subscription(struct subscriber *sub, uint8_t report_id)
 {
-	int irep_idx = get_input_report_idx(report_id);
+	int err = hid_reportq_subscribe(sub->in_reportq, report_id);
 
-	if (irep_idx < 0) {
-		LOG_ERR("Cannot enable subscription for report %" PRIu8,
-			report_id);
-		return;
+	if (err) {
+		LOG_ERR("hid_reportq_subscribe failed (err: %d)", err);
 	}
-
-	WRITE_BIT(sub->enabled_reports_bm, report_id, 1);
 }
 
 static void disable_subscription(struct subscriber *sub, uint8_t report_id)
 {
-	int irep_idx = get_input_report_idx(report_id);
+	int err = hid_reportq_unsubscribe(sub->in_reportq, report_id);
 
-	if (irep_idx < 0) {
-		LOG_ERR("Cannot disable subscription for report %" PRIu8,
-			report_id);
-		return;
+	if (err) {
+		LOG_ERR("hid_reportq_nsubscribe failed (err: %d)", err);
 	}
 
 	WRITE_BIT(sub->enabled_reports_bm, report_id, 0);
