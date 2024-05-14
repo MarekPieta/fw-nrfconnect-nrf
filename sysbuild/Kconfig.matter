@@ -20,6 +20,22 @@ config MATTER_FACTORY_DATA_MERGE_WITH_FIRMWARE
 	  when flashing the firmware using the west tool, includes the factory data
 	  as well.
 
+config MATTER_OTA
+	bool "Matter OTA Software Update"
+	default y
+	depends on PARTITION_MANAGER
+	help
+	  Enables over-the-air (OTA) Requestor role that allows the node to perform
+	  Device Firmware Upgrade by quering and downloading a new firmware image
+	  from a peer OTA Provider node.
+
+config MATTER_OTA_IMAGE_FILE_NAME
+	string "OTA image file name"
+	default "matter.ota"
+	depends on MATTER_OTA
+	help
+	  Provides the file name of the generated Matter OTA image.
+
 endif # MATTER_FACTORY_DATA
 
 endmenu
