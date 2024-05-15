@@ -20,10 +20,10 @@ function(dfu_app_zip_package)
           "${DEFAULT_IMAGE}.binimage_index=0"
           "${DEFAULT_IMAGE}.binslot_index_primary=1"
           "${DEFAULT_IMAGE}.binslot_index_secondary=2"
-          "${DEFAULT_IMAGE}.binversion_MCUBOOT=${CONFIG_MCUBOOT_IMGTOOL_SIGN_VERSION}"
+          "version_MCUBOOT=${CONFIG_MCUBOOT_IMGTOOL_SIGN_VERSION}"
          )
       list(APPEND bin_files "${DEFAULT_IMAGE}/zephyr/${CONFIG_KERNEL_BIN_NAME}.signed.bin")
-      list(APPEND zip_names "${DEFAULT_IMAGE}.bin")
+      list(APPEND zip_names "app_update.bin")
       list(APPEND signed_targets ${DEFAULT_IMAGE}_extra_byproducts)
       set(exclude_files EXCLUDE ${DEFAULT_IMAGE}/zephyr/${CONFIG_KERNEL_BIN_NAME}.signed.bin)
       set(include_files INCLUDE ${DEFAULT_IMAGE}/zephyr/${CONFIG_KERNEL_BIN_NAME}.bin)
@@ -31,17 +31,16 @@ function(dfu_app_zip_package)
       # Application in DirectXIP mode
       set(generate_script_app_params
           "${DEFAULT_IMAGE}load_address=$<TARGET_PROPERTY:partition_manager,PM_MCUBOOT_PRIMARY_APP_ADDRESS>"
-          "${DEFAULT_IMAGE}version_MCUBOOT+XIP=${CONFIG_MCUBOOT_IMGTOOL_SIGN_VERSION}"
+          "version_MCUBOOT+XIP=${CONFIG_MCUBOOT_IMGTOOL_SIGN_VERSION}"
           "${DEFAULT_IMAGE}slot=0"
           "mcuboot_secondary_app.binload_address=$<TARGET_PROPERTY:partition_manager,PM_MCUBOOT_SECONDARY_APP_ADDRESS>"
           "mcuboot_secondary_app.binslot=1"
-          "mcuboot_secondary_app.binversion_MCUBOOT+XIP=${CONFIG_MCUBOOT_IMGTOOL_SIGN_VERSION}"
+          "version_MCUBOOT+XIP=${CONFIG_MCUBOOT_IMGTOOL_SIGN_VERSION}"
           "load_address=$<TARGET_PROPERTY:partition_manager,PM_APP_ADDRESS>"
-          "version_MCUBOOT=${CONFIG_MCUBOOT_IMGTOOL_SIGN_VERSION}"
          )
 
       list(APPEND bin_files "${DEFAULT_IMAGE}/zephyr/${CONFIG_KERNEL_BIN_NAME}.signed.bin;mcuboot_secondary_app/zephyr/${CONFIG_KERNEL_BIN_NAME}.signed.bin")
-      list(APPEND zip_names "${DEFAULT_IMAGE}.bin;mcuboot_secondary_app.bin")
+      list(APPEND zip_names "app_update.bin;mcuboot_secondary_app_update.bin")
       list(APPEND signed_targets ${DEFAULT_IMAGE}_extra_byproducts mcuboot_secondary_app_extra_byproducts)
       set(exclude_files EXCLUDE ${DEFAULT_IMAGE}/zephyr/${CONFIG_KERNEL_BIN_NAME}.signed.bin;mcuboot_secondary_app/zephyr/${CONFIG_KERNEL_BIN_NAME}.signed.bin)
       set(include_files INCLUDE ${DEFAULT_IMAGE}/zephyr/${CONFIG_KERNEL_BIN_NAME}.bin;mcuboot_secondary_app/zephyr/${CONFIG_KERNEL_BIN_NAME}.bin)
