@@ -91,6 +91,8 @@ else()
   if(CONFIG_MBEDTLS_PSA_CRYPTO_C)
     # Build PSA APIs if requested
     set(COMPILE_PSA_APIS                        True)
+
+    set(CONFIG_MBEDTLS_PSA_CRYPTO_EXTERNAL_RNG  True)
   endif()
 endif()
 
