@@ -143,6 +143,12 @@ endif # DESKTOP_USB_STACK_LEGACY
 
 if DESKTOP_USB_STACK_NEXT
 
+config USBD_HID_IN_BUF_COUNT
+	default 1
+	help
+	  nRF Desktop queues HID reports at the source. There is no need to use
+	  multiple buffers in the IN pool per HID instance.
+
 choice USBD_LOG_LEVEL_CHOICE
 	default USBD_LOG_LEVEL_WRN
 	help
