@@ -18,6 +18,7 @@
 #include <zephyr/usb/usb_device.h>
 #include <zephyr/usb/usb_ch9.h>
 #include <zephyr/usb/class/usb_hid.h>
+#include <zephyr/usb/class/usbd_hid.h>
 
 #define MODULE usb_state
 #include <caf/events/module_state_event.h>
@@ -70,7 +71,16 @@ BUILD_ASSERT(IS_ENABLED(CONFIG_DESKTOP_USB_STACK_NEXT) ||
 	     "Unsupported USB stack");
 
 #if CONFIG_DESKTOP_USB_STACK_NEXT
-static struct usb_hid_device usb_hid_device[0];
+#define USB_NEXT_USB_HID_DEVICE_INIT(node_id)	\
+{						\
+	.dev = DEVICE_DT_GET(node_id),		\
+	.hid_protocol = HID_PROTOCOL_REPORT,	\
+	.sent_report_id = REPORT_ID_COUNT,	\
+},
+
+static struct usb_hid_device usb_hid_device[] = {
+	DT_FOREACH_STATUS_OKAY(zephyr_hid_device, USB_NEXT_USB_HID_DEVICE_INIT)
+};
 #else
 static struct usb_hid_device usb_hid_device[CONFIG_USB_HID_DEVICE_COUNT];
 #endif
@@ -207,7 +217,11 @@ static void report_sent(const struct device *dev, bool error)
 {
 	struct usb_hid_device *usb_hid = dev_to_hid(dev);
 
-	__ASSERT_NO_MSG(usb_hid->sent_report_id != REPORT_ID_COUNT);
+	/* TODO: Improve. */
+	if (usb_hid->sent_report_id == REPORT_ID_COUNT) {
+		LOG_WRN("No HID report to be sent");
+		return;
+	}
 
 	struct hid_report_sent_event *event = new_hid_report_sent_event();
 
@@ -288,7 +302,7 @@ static void send_hid_report(const struct hid_report_event *event)
 	int err = 0;
 
 	if (IS_ENABLED(CONFIG_DESKTOP_USB_STACK_NEXT)) {
-		LOG_WRN("send_hid_report not integrated for USB next");
+		err = hid_device_submit_report(usb_hid->dev, report_size, report_buffer);
 	} else {
 		__ASSERT_NO_MSG(IS_ENABLED(CONFIG_DESKTOP_USB_STACK_LEGACY));
 		err = hid_int_ep_write(usb_hid->dev, report_buffer, report_size, NULL);
@@ -799,6 +813,75 @@ static int usb_init_legacy(void)
 	return 0;
 }
 
+/* Asynchrobous... Improve? */
+static void iface_ready_next(const struct device *dev, const bool ready)
+{
+	enum usb_state new_state = state;
+	struct usb_hid_device *usb_hid = dev_to_hid(dev);
+
+	__ASSERT_NO_MSG(usb_hid);
+	ARG_UNUSED(usb_hid);
+
+	if (ready) {
+		new_state = USB_STATE_ACTIVE;
+	} else {
+		new_state = USB_STATE_POWERED;
+	}
+
+	broadcast_usb_state_change(new_state);
+}
+
+static int get_report_next(const struct device *dev, const uint8_t type, const uint8_t id,
+			   const uint16_t len, uint8_t *const buf)
+{
+	return get_report(dev, type, id, buf, len);
+}
+
+static int set_report_next(const struct device *dev, const uint8_t type, const uint8_t id,
+			   const uint16_t len, const uint8_t *const buf)
+{
+	return set_report(dev, type, id, buf, len);
+}
+
+static int usb_init_next_hid_device_init(struct usb_hid_device *usb_hid_dev, uint32_t report_bm)
+{
+	static const struct hid_device_ops hid_ops = {
+		.iface_ready = iface_ready_next,
+		.get_report = get_report_next,
+		.set_report = set_report_next,
+		.set_protocol = protocol_change,
+		.input_report_done = report_sent_cb,
+	};
+
+	usb_hid_dev->report_bm = report_bm;
+
+	int err = hid_device_register(usb_hid_dev->dev, hid_report_desc, hid_report_desc_size,
+				      &hid_ops);
+
+	if (err) {
+		LOG_ERR("hid_device_register failed for %p (err: %d)",
+			(void *)usb_hid_dev->dev, err);
+	}
+
+	return err;
+}
+
+static int usb_init_next_hids_init(void)
+{
+	int err = 0;
+
+	for (size_t i = 0; i < ARRAY_SIZE(usb_hid_device); i++) {
+		err = usb_init_next_hid_device_init(&usb_hid_device[i], get_report_bm(i));
+
+		if (err) {
+			LOG_ERR("usb_init_next_hid_device_init failed (err: %d)", err);
+			break;
+		}
+	}
+
+	return err;
+}
+
 static void usb_init_next_status_cb(struct usbd_contex *const contex,
 				    const struct usbd_msg *const msg)
 {
@@ -1000,6 +1083,13 @@ static struct usbd_contex *usb_init_next_usbd_init(void)
 
 static int usb_init_next(void)
 {
+	int err = usb_init_next_hids_init();
+
+	if (err) {
+		LOG_ERR("usb_init_next_hids_init failed (err: %d)", err);
+		return err;
+	}
+
 	struct usbd_contex *usbd = usb_init_next_usbd_init();
 
 	if (!usbd) {
@@ -1007,7 +1097,7 @@ static int usb_init_next(void)
 		return -ENXIO;
 	}
 
-	int err = usbd_msg_register_cb(usbd, usb_init_next_status_cb);
+	err = usbd_msg_register_cb(usbd, usb_init_next_status_cb);
 
 	if (err) {
 		LOG_ERR("usbd_msg_register_cb failed (err: %d)", err);
