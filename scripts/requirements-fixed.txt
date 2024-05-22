@@ -92,7 +92,7 @@ pygments==2.16.1          # via gcovr
 pyjwt==2.8.0              # via pygithub
 pykwalify==1.8.0          # via -r zephyr/scripts/requirements-base.txt, west
 pylink-square==1.2.0      # via -r zephyr/scripts/requirements-base.txt, pyocd
-pylint==2.17.5            # via -r nrf/scripts/requirements-build.txt, -r zephyr/scripts/requirements-compliance.txt
+pylint==3.2.2             # via -r nrf/scripts/requirements-build.txt, -r zephyr/scripts/requirements-compliance.txt
 pynacl==1.5.0             # via pygithub
 pyocd==0.35.1             # via -r zephyr/scripts/requirements-run-test.txt
 pyparsing==3.1.1          # via -r nrf/scripts/requirements-ci.txt
