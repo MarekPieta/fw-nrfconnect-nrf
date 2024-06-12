@@ -1049,6 +1049,9 @@ This section provides detailed lists of changes by :ref:`script <scripts>`.
 
 * Added the :file:`thingy91x_dfu.py` script in the :file:`scripts/west_commands` folder.
   The script adds the west commands ``west thingy91x-dfu`` and ``west thingy91x-reset`` for convenient use of the serial recovery functionality.
+* Added support for format version ``1`` of :file:`dfu_application.zip` files to :ref:`nrf_desktop_config_channel_script` Python script.
+  Since NCS 2.7, the script supports both format version ``0`` and ``1`` of the zip archive.
+  Older version of the script do not support fomat version ``1`` of the zip archive.
 
 MCUboot
 =======
