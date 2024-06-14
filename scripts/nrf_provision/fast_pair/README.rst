@@ -10,9 +10,8 @@ Fast Pair provision script
 This Python script generates a hexadecimal file required for the :ref:`Google Fast Pair integration in the nRF Connect SDK <ug_bt_fast_pair>`.
 
 .. note::
-   When you :ref:`use Google Fast Pair with the nRF Connect SDK <ug_bt_fast_pair>`, the script is automatically called by the build system.
-   There is no need to generate and program the hexadecimal file manually.
-   See :ref:`ug_bt_fast_pair_provisioning` for details.
+   The script is automatically called by the build system in typical scenarios.
+   See the :ref:`ug_bt_fast_pair_provisioning_script_triggers` section from the :ref:`ug_bt_fast_pair` guide for details.
 
 Overview
 ********
