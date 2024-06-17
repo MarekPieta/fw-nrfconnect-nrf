@@ -30,9 +30,12 @@ The Fast Pair service also contains additional GATT characteristics under the fo
 Configuration
 *************
 
-Set the :kconfig:option:`CONFIG_BT_FAST_PAIR` Kconfig option to enable the service.
+For projects with sysbuild support, the ``SB_CONFIG_BT_FAST_PAIR`` Kconfig option enables the service in the sysbuild configuration.
+The build system automatically sets the :kconfig:option:`CONFIG_BT_FAST_PAIR` Kconfig option in the main application image according to the ``SB_CONFIG_BT_FAST_PAIR`` Kconfig option configuration.
 
-The following Kconfig options are also available for this service:
+For projects without sysbuild support, the :kconfig:option:`CONFIG_BT_FAST_PAIR` Kconfig option enables the service in the main application image.
+
+With the :kconfig:option:`CONFIG_BT_FAST_PAIR` Kconfig option enabled, the following Kconfig options are available for this service:
 
 * :kconfig:option:`CONFIG_BT_FAST_PAIR_GATT_SERVICE_MODEL_ID` - The option adds the Model ID characteristic to the Fast Pair GATT service.
   This option is enabled by default unless the :kconfig:option:`CONFIG_BT_FAST_PAIR_FMDN` is enabled.
