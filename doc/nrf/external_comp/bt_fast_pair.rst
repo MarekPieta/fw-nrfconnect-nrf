@@ -174,8 +174,20 @@ Provisioning registration data onto device
 The Fast Pair standard requires provisioning the device with Model ID and Anti-Spoofing Private Key obtained during device model registration.
 In the |NCS|, the provisioning data is generated as a hexadecimal file using the :ref:`bt_fast_pair_provision_script`.
 
-If Fast Pair is enabled with the ``SB_CONFIG_BT_FAST_PAIR`` Kconfig option, the build system automatically calls the Fast Pair provision script and includes the resulting hexadecimal file in the firmware (the :file:`merged.hex` file).
-You must provide the following CMake options:
+.. _ug_bt_fast_pair_provisioning_script_triggers:
+
+Build system triggers for the provision script
+----------------------------------------------
+
+The build system automatically calls the Fast Pair provision script and includes the resulting hexadecimal file in the firmware (the :file:`merged.hex` file) in the following configurations:
+
+* If you use sysbuild (the default build option) in your application project and you enable the ``SB_CONFIG_BT_FAST_PAIR`` Kconfig option.
+* If you do not use sysbuild in your application project and you enable the :kconfig:option:`CONFIG_BT_FAST_PAIR` Kconfig option in you main application image.
+
+Passing provisioned data to the script
+--------------------------------------
+
+To include the provisioning data, you must provide the following CMake options in the build command:
 
 * ``FP_MODEL_ID`` - Fast Pair Model ID in format ``0xXXXXXX``,
 * ``FP_ANTI_SPOOFING_KEY`` - base64-encoded Fast Pair Anti-Spoofing Private Key.
@@ -193,7 +205,12 @@ See :ref:`cmake_options` for more information about defining CMake options.
 Performing prerequisite operations
 **********************************
 
-You must enable the :kconfig:option:`CONFIG_BT_FAST_PAIR` Kconfig option to support the Google Fast Pair standard in your project.
+To add the Google Fast Pair subsystem to your project, you must enable the ``SB_CONFIG_BT_FAST_PAIR`` Kconfig option if you use the default |NCS| build system configuration with sysbuild.
+If you do not use sysbuild, you must enable :kconfig:option:`CONFIG_BT_FAST_PAIR` Kconfig option at the main application image level.
+
+.. note::
+   Sysbuild copies the value of the ``SB_CONFIG_BT_FAST_PAIR`` Kconfig option into the :kconfig:option:`CONFIG_BT_FAST_PAIR` Kconfig option that is part of the main application image.
+   Your configuration of the :kconfig:option:`CONFIG_BT_FAST_PAIR` Kconfig option at the main application image level has no effect as this Kconfig option is directly set by sysbuild.
 
 An application can communicate with the Fast Pair subsystem using API calls and registered callbacks.
 The Fast Pair subsystem uses the registered callbacks to inform the application about the Fast Pair related events.
@@ -893,7 +910,8 @@ Required scripts
 ****************
 
 The :ref:`bt_fast_pair_provision_script` is required to generate the provisioning data for the device.
-When the ``SB_CONFIG_BT_FAST_PAIR`` Kconfig option is enabled, the build system automatically invokes the script during the application build.
+The script is automatically called by the build system in typical scenarios.
+See the :ref:`ug_bt_fast_pair_provisioning_script_triggers` section for details.
 
 Terms and licensing
 *******************
