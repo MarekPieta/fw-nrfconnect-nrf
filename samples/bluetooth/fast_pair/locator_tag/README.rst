@@ -791,6 +791,7 @@ For details about integrating Fast Pair in the |NCS|, see :ref:`ug_bt_fast_pair`
 
 This sample enables the ``SB_CONFIG_BT_FAST_PAIR`` Kconfig option.
 With this option enabled, the build system calls the :ref:`bt_fast_pair_provision_script` to automatically generate the hexadecimal file that contains Fast Pair Model ID and Anti Spoofing Private Key.
+For more details about enabling Fast Pair for your application see :ref:`ug_bt_fast_pair_prerequisite_ops_kconfig`.
 
 Bluetooth LE advertising data providers
 =======================================
