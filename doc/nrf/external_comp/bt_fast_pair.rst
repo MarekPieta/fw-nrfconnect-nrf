@@ -174,20 +174,8 @@ Provisioning registration data onto device
 The Fast Pair standard requires provisioning the device with Model ID and Anti-Spoofing Private Key obtained during device model registration.
 In the |NCS|, the provisioning data is generated as a hexadecimal file using the :ref:`bt_fast_pair_provision_script`.
 
-.. _ug_bt_fast_pair_provisioning_script_triggers:
-
-Build system triggers for the provision script
-----------------------------------------------
-
-The build system automatically calls the Fast Pair provision script and includes the resulting hexadecimal file in the firmware (the :file:`merged.hex` file) in the following configurations:
-
-* If you use sysbuild (the default build option) in your application project and you enable the ``SB_CONFIG_BT_FAST_PAIR`` Kconfig option.
-* If you do not use sysbuild in your application project and you enable the :kconfig:option:`CONFIG_BT_FAST_PAIR` Kconfig option in you main application image.
-
-Passing provisioned data to the script
---------------------------------------
-
-To include the provisioning data, you must provide the following CMake options in the build command:
+The build system automatically calls the Fast Pair provision script and includes the resulting hexadecimal file in the firmware (the :file:`merged.hex` file) when building with Fast Pair in the |NCS|.
+You must provide the following additional CMake options to build an application with Fast Pair support:
 
 * ``FP_MODEL_ID`` - Fast Pair Model ID in format ``0xXXXXXX``,
 * ``FP_ANTI_SPOOFING_KEY`` - base64-encoded Fast Pair Anti-Spoofing Private Key.
@@ -197,6 +185,7 @@ The ``bt_fast_pair`` partition address is provided automatically by the build sy
 For example, when building an application with the |nRFVSC|, you need to add the following parameters in the **Extra CMake arguments** field on the **Add Build Configuration view**: ``-DFP_MODEL_ID=0xFFFFFF -DFP_ANTI_SPOOFING_KEY=AbAbAbAbAbAbAbAbAbAbAbAbAbAbAbAbAbAbAbAbAbA=``.
 Make sure to replace ``0xFFFFFF`` and ``AbAbAbAbAbAbAbAbAbAbAbAbAbAbAbAbAbAbAbAbAbA=`` with values obtained for your device.
 See :ref:`cmake_options` for more information about defining CMake options.
+See the following sections for information on how to add the Google Fast Pair subsystem to your project.
 
 .. rst-class:: numbered-step
 
@@ -205,12 +194,29 @@ See :ref:`cmake_options` for more information about defining CMake options.
 Performing prerequisite operations
 **********************************
 
+To support the Google Fast Pair subsystem in your project, you need to follow the steps in the following subsections that describe necessary Kconfig and API actions:
+
+* :ref:`ug_bt_fast_pair_prerequisite_ops_kconfig`
+* :ref:`ug_bt_fast_pair_prerequisite_ops_api`
+
+Remaining subsections describe prerequisite operations for Fast Pair extensions supported in the |NCS|.
+
+.. _ug_bt_fast_pair_prerequisite_ops_kconfig:
+
+Enabling Fast Pair in Kconfig
+=============================
+
 To add the Google Fast Pair subsystem to your project, you must enable the ``SB_CONFIG_BT_FAST_PAIR`` Kconfig option if you use the default |NCS| build system configuration with sysbuild.
 If you do not use sysbuild, you must enable :kconfig:option:`CONFIG_BT_FAST_PAIR` Kconfig option at the main application image level.
 
 .. note::
    Sysbuild copies the value of the ``SB_CONFIG_BT_FAST_PAIR`` Kconfig option into the :kconfig:option:`CONFIG_BT_FAST_PAIR` Kconfig option that is part of the main application image.
    Your configuration of the :kconfig:option:`CONFIG_BT_FAST_PAIR` Kconfig option at the main application image level has no effect as this Kconfig option is directly set by sysbuild.
+
+.. _ug_bt_fast_pair_prerequisite_ops_api:
+
+Enabling Fast Pair with API
+===========================
 
 An application can communicate with the Fast Pair subsystem using API calls and registered callbacks.
 The Fast Pair subsystem uses the registered callbacks to inform the application about the Fast Pair related events.
@@ -910,8 +916,7 @@ Required scripts
 ****************
 
 The :ref:`bt_fast_pair_provision_script` is required to generate the provisioning data for the device.
-The script is automatically called by the build system in typical scenarios.
-See the :ref:`ug_bt_fast_pair_provisioning_script_triggers` section for details.
+The script is automatically called by the build system when building with Fast Pair in the |NCS|.
 
 Terms and licensing
 *******************
