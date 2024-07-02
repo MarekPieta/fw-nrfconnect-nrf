@@ -1,0 +1,73 @@
+#
+# Copyright (c) 2024 Nordic Semiconductor
+#
+# SPDX-License-Identifier: LicenseRef-Nordic-5-Clause
+#
+
+config APP_DFU
+	bool "MCUmgr & SMP BT DFU support"
+	select CRC
+	select FLASH_MAP
+	select FLASH
+	select IMG_MANAGER
+	select MCUMGR
+	select MCUMGR_TRANSPORT_BT
+	select MCUMGR_TRANSPORT_BT_REASSEMBLY
+	select MCUMGR_TRANSPORT_BT_CONN_PARAM_CONTROL
+	select MCUMGR_GRP_IMG
+	select MCUMGR_GRP_OS
+	select MCUMGR_GRP_OS_BOOTLOADER_INFO
+	select MCUMGR_MGMT_NOTIFICATION_HOOKS
+	select MCUMGR_SMP_COMMAND_STATUS_HOOKS
+	select NET_BUF
+	select NORDIC_QSPI_NOR if $(dt_chosen_enabled,$(DT_CHOSEN_EXT_FLASH))
+	select STREAM_FLASH
+	select ZCBOR
+	depends on BOOTLOADER_MCUBOOT
+	help
+	  Enable support for Device Firmware Update (DFU) over MCUmgr & SMP BT.
+
+if APP_DFU
+
+config MCUMGR_TRANSPORT_BT_DYNAMIC_SVC_REGISTRATION
+	default n
+
+config MCUMGR_TRANSPORT_BT_AUTHEN
+	default n
+
+config IMG_ERASE_PROGRESSIVELY
+	default y
+
+if MCUMGR_TRANSPORT_BT_REASSEMBLY
+
+config MCUMGR_TRANSPORT_NETBUF_SIZE
+	default 2475
+
+config MCUMGR_GRP_OS_MCUMGR_PARAMS
+	default y
+
+endif # MCUMGR_TRANSPORT_BT_REASSEMBLY
+
+if NORDIC_QSPI_NOR
+
+config NORDIC_QSPI_NOR_FLASH_LAYOUT_PAGE_SIZE
+	default 4096
+
+config NORDIC_QSPI_NOR_STACK_WRITE_BUFFER_SIZE
+	default 16
+
+endif # NORDIC_QSPI_NOR
+
+config BT_L2CAP_TX_MTU
+	default 498 if BT_HCI_HOST
+
+config BT_BUF_ACL_TX_SIZE
+	default 251
+
+config BT_BUF_ACL_RX_SIZE
+	default 502
+
+config BT_CTLR_DATA_LENGTH_MAX
+	default 251 if BT_CTLR
+
+endif # APP_DFU

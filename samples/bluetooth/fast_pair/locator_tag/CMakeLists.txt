@@ -28,6 +28,10 @@ target_sources(app PRIVATE
   src/fp_adv.c
 )
 
+if (CONFIG_APP_DFU)
+  target_sources(app PRIVATE src/dfu.c)
+endif()
+
 if (NOT CONFIG_BT_FAST_PAIR_FMDN_RING_COMP_NONE)
   target_sources(app PRIVATE src/ring.c)
 endif()

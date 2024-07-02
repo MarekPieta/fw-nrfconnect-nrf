@@ -4,7 +4,9 @@
 # SPDX-License-Identifier: LicenseRef-Nordic-5-Clause
 #
 
-source "${ZEPHYR_BASE}/share/sysbuild/Kconfig"
-
-config NRF_DEFAULT_IPC_RADIO
+config APP_DFU
+	bool "Enable DFU over MCUmgr & SMP BT"
 	default y
+	depends on BOOTLOADER_MCUBOOT
+
+source "${ZEPHYR_BASE}/share/sysbuild/Kconfig"

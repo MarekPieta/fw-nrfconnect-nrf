@@ -18,6 +18,7 @@
 
 #include "app_fp_adv.h"
 #include "app_ui.h"
+#include "app_dfu.h"
 
 #include <zephyr/logging/log.h>
 LOG_MODULE_DECLARE(fp_fmdn, LOG_LEVEL_INF);
@@ -105,9 +106,29 @@ static bool fp_adv_is_pairing_mode(enum app_fp_adv_mode fp_adv_mode)
 	return ((fp_adv_mode == APP_FP_ADV_MODE_DISCOVERABLE) && can_pair());
 }
 
+static void dfu_adv_enable(enum app_fp_adv_mode fp_adv_mode)
+{
+	bool dfu_mode = app_dfu_is_dfu_mode();
+
+	if (!dfu_mode) {
+		app_dfu_adv_prov_enable(false, false);
+		return;
+	}
+
+	if (fp_adv_mode == APP_FP_ADV_MODE_DISCOVERABLE) {
+		app_dfu_adv_prov_enable(true, false);
+	} else if (fp_adv_mode == APP_FP_ADV_MODE_NOT_DISCOVERABLE) {
+		app_dfu_adv_prov_enable(false, true);
+	}
+}
+
 static void fp_adv_prov_configure(enum app_fp_adv_mode fp_adv_mode)
 {
 	bt_le_adv_prov_fast_pair_enable(can_pair());
+
+	if (IS_ENABLED(CONFIG_APP_DFU)) {
+		dfu_adv_enable(fp_adv_mode);
+	}
 
 	switch (fp_adv_mode) {
 	case APP_FP_ADV_MODE_DISCOVERABLE:

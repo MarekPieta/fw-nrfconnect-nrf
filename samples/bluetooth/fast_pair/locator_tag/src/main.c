@@ -19,6 +19,7 @@
 #include "app_fp_adv.h"
 #include "app_ring.h"
 #include "app_ui.h"
+#include "app_dfu.h"
 
 #include <zephyr/logging/log.h>
 LOG_MODULE_REGISTER(fp_fmdn, LOG_LEVEL_INF);
@@ -106,7 +107,7 @@ static const struct bt_conn_auth_cb conn_auth_callbacks = {
 	.pairing_accept = pairing_accept,
 };
 
-static bool identifying_info_read_allow(struct bt_conn *conn)
+static bool identifying_info_allow(struct bt_conn *conn)
 {
 	ARG_UNUSED(conn);
 
@@ -118,17 +119,30 @@ static bool identifying_info_read_allow(struct bt_conn *conn)
 		return true;
 	}
 
-	LOG_INF("Rejecting read operation of identifying information");
+	LOG_INF("Rejecting operation on the identifying information");
 
 	return false;
 }
 
-static bool gatt_read_authorize(struct bt_conn *conn, const struct bt_gatt_attr *attr)
+static bool gatt_authorize(struct bt_conn *conn, const struct bt_gatt_attr *attr)
 {
 	const struct bt_uuid *uuid_block_list[] = {
 		/* GAP service characteristics */
 		BT_UUID_GAP_DEVICE_NAME,
 	};
+
+	/* Access to the SMP service is allowed only when the DFU mode is active. */
+	if (IS_ENABLED(CONFIG_APP_DFU)) {
+		if (app_dfu_is_smp_char(attr->uuid)) {
+			if (!app_dfu_is_dfu_mode()) {
+				LOG_INF("Rejecting operation on the SMP characteristic");
+
+				return false;
+			}
+
+			return true;
+		}
+	}
 
 	for (size_t i = 0; i < ARRAY_SIZE(uuid_block_list); i++) {
 		if (bt_uuid_cmp(attr->uuid, uuid_block_list[i]) == 0) {
@@ -136,7 +150,7 @@ static bool gatt_read_authorize(struct bt_conn *conn, const struct bt_gatt_attr 
 			 * The Provider shouldn't expose any identifying information
 			 * in an unauthenticated manner (e.g. names or identifiers).
 			 */
-			return identifying_info_read_allow(conn);
+			return identifying_info_allow(conn);
 		}
 	}
 
@@ -144,7 +158,8 @@ static bool gatt_read_authorize(struct bt_conn *conn, const struct bt_gatt_attr 
 }
 
 static const struct bt_gatt_authorization_cb gatt_authorization_callbacks = {
-	.read_authorize = gatt_read_authorize,
+	.read_authorize = gatt_authorize,
+	.write_authorize = gatt_authorize,
 };
 
 static void fp_account_key_written(struct bt_conn *conn)
@@ -536,6 +551,14 @@ static void init_work_handle(struct k_work *w)
 		return;
 	}
 
+	if (IS_ENABLED(CONFIG_APP_DFU)) {
+		err = app_dfu_init();
+		if (err) {
+			LOG_ERR("FMDN: app_dfu_init failed (err %d)", err);
+			return;
+		}
+	}
+
 	err = bt_fast_pair_enable();
 	if (err) {
 		LOG_ERR("FMDN: bt_fast_pair_enable failed (err %d)", err);
@@ -550,6 +573,10 @@ int main(void)
 	int err;
 
 	LOG_INF("Starting Bluetooth Fast Pair locator tag example");
+
+	if (IS_ENABLED(CONFIG_APP_DFU)) {
+		app_dfu_fw_version_log();
+	}
 
 	/* Switch to the cooperative thread context before interaction
 	 * with the Fast Pair and FMDN API.
