@@ -65,6 +65,7 @@ struct usb_hid_device {
 	uint32_t idle_duration[REPORT_ID_COUNT];
 	bool report_enabled[REPORT_ID_COUNT];
 	bool enabled;
+	struct hid_report_sent_event *report_sent_on_sof;
 };
 
 
@@ -138,10 +139,7 @@ static struct usb_hid_device *dev_to_hid(const struct device *dev)
 		}
 	}
 
-	if (usb_hid == NULL) {
-		__ASSERT_NO_MSG(false);
-	}
-
+	__ASSERT_NO_MSG(usb_hid);
 	return usb_hid;
 }
 
@@ -243,6 +241,14 @@ static int set_report(const struct device *dev, uint8_t report_type, uint8_t rep
 	return err;
 }
 
+static void report_sent_sof(struct usb_hid_device *usb_hid)
+{
+	if (usb_hid->report_sent_on_sof) {
+		APP_EVENT_SUBMIT(usb_hid->report_sent_on_sof);
+		usb_hid->report_sent_on_sof = NULL;
+	}
+}
+
 static void report_sent(const struct device *dev, bool error)
 {
 	struct usb_hid_device *usb_hid = dev_to_hid(dev);
@@ -254,7 +260,16 @@ static void report_sent(const struct device *dev, bool error)
 	event->report_id = usb_hid->sent_report_id;
 	event->subscriber = usb_hid;
 	event->error = error;
-	APP_EVENT_SUBMIT(event);
+
+	if (!IS_ENABLED(CONFIG_DESKTOP_HID_REPORT_SENT_ON_USB_SOF)) {
+		APP_EVENT_SUBMIT(event);
+	else if (error) {
+		__ASSERT_NO_MSG(!usb_hid->report_sent_on_sof);
+		APP_EVENT_SUBMIT(event);
+	} else {
+		__ASSERT_NO_MSG(!usb_hid->report_sent_on_sof);
+		usb_hid->report_sent_on_sof = event;
+	}
 
 	/* Used to assert if previous report was sent before sending new one. */
 	usb_hid->sent_report_id = REPORT_ID_COUNT;
@@ -771,6 +786,16 @@ static void usb_init_legacy_status_cb(enum usb_dc_status_code cb_status, const u
 		}
 		break;
 
+	case USB_DC_SOF:
+		if (IS_ENABLED(CONFIG_DESKTOP_HID_REPORT_SENT_ON_USB_SOF)) {
+			for (size_t i = 0; i < ARRAY_SIZE(usb_hid_device); i++) {
+				struct usb_hid_device *usb_hid = &usb_hid_device[i];
+
+				report_sent_sof(usb_hid);
+			}
+		}
+		/* Fall-through. */
+
 	case USB_DC_SET_HALT:
 	case USB_DC_CLEAR_HALT:
 		/* Ignore */
@@ -944,6 +969,11 @@ static void report_sent_cb_next(const struct device *dev)
 	}
 }
 
+static void sof_next(const struct device *dev)
+{
+	report_sent_sof(dev_to_hid(dev));
+}
+
 static int usb_init_next_hid_device_init(struct usb_hid_device *usb_hid_dev, uint32_t report_bm)
 {
 	static const struct hid_device_ops hid_ops = {
@@ -954,6 +984,7 @@ static int usb_init_next_hid_device_init(struct usb_hid_device *usb_hid_dev, uin
 		.get_idle = get_idle_next,
 		.set_protocol = protocol_change,
 		.input_report_done = report_sent_cb_next,
+		.sof = sof_next,
 	};
 
 	usb_hid_dev->report_bm = report_bm;
