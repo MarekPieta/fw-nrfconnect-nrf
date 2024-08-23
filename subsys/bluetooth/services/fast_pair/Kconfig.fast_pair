@@ -14,8 +14,13 @@ if BT_FAST_PAIR
 
 rsource "use_case/Kconfig"
 
+config BT_FAST_PAIR_SUBSEQUENT_PAIRING_PROMPTLESS
+	bool
+	help
+	  Disable prompt to block configuring a given property by user.
+
 config BT_FAST_PAIR_SUBSEQUENT_PAIRING
-	bool "Fast Pair subsequent pairing [EXPERIMENTAL]"
+	bool "Fast Pair subsequent pairing [EXPERIMENTAL]" if !BT_FAST_PAIR_SUBSEQUENT_PAIRING_PROMPTLESS
 	select EXPERIMENTAL
 	help
 	  Enable support for the subsequent pairing feature. Subsequent pairing
