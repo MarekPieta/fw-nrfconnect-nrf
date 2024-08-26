@@ -72,7 +72,7 @@ struct usb_hid_buf {
 	uint8_t data[REPORT_ID_SIZE + REPORT_BUFFER_SIZE_INPUT_REPORT];
 	uint8_t size;
 	uint8_t status_bm;
-} __aligned(sizeof(void *));
+} __aligned(32);
 
 struct usb_hid_device {
 	const struct device *dev;
@@ -1306,6 +1306,7 @@ static void usb_init_next_status_cb(struct usbd_context *const usbd,
 		module_set_state(MODULE_STATE_ERROR);
 		break;
 
+	case USBD_MSG_CONFIGURATION:
 	case USBD_MSG_CDC_ACM_LINE_CODING:
 	case USBD_MSG_CDC_ACM_CONTROL_LINE_STATE:
 		/* Ignore */
@@ -1424,8 +1425,11 @@ static struct usbd_context *usb_init_next_usbd_init(void)
 	static const uint8_t attributes = IS_ENABLED(CONFIG_DESKTOP_USB_REMOTE_WAKEUP) ?
 					  (USB_SCD_REMOTE_WAKEUP) : (0);
 
-	USBD_CONFIGURATION_DEFINE(fs_config, attributes, max_power);
-	USBD_CONFIGURATION_DEFINE(hs_config, attributes, max_power);
+	USBD_DESC_CONFIG_DEFINE(fs_cfg_desc, "FS Configuration");
+	USBD_DESC_CONFIG_DEFINE(hs_cfg_desc, "HS Configuration");
+
+	USBD_CONFIGURATION_DEFINE(fs_config, attributes, max_power, &fs_cfg_desc);
+	USBD_CONFIGURATION_DEFINE(hs_config, attributes, max_power, &hs_cfg_desc);
 
 	if (!usbd_can_detect_vbus(&usbd)) {
 		LOG_ERR("USBD controller cannot detect VBUS state change");
