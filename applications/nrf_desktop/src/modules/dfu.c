@@ -287,7 +287,7 @@ static void background_erase_handler(struct k_work *work)
 
 	__ASSERT_NO_MSG(erase_offset + FLASH_PAGE_SIZE <= flash_area->fa_size);
 
-	if (!is_page_clean(flash_area, erase_offset, FLASH_PAGE_SIZE)) {
+//	if (!is_page_clean(flash_area, erase_offset, FLASH_PAGE_SIZE)) {
 		err = flash_area_erase(flash_area, erase_offset, FLASH_PAGE_SIZE);
 		if (err) {
 			LOG_ERR("Cannot erase page (%d)", err);
@@ -300,9 +300,17 @@ static void background_erase_handler(struct k_work *work)
 
 			return;
 		}
-	}
+//	}
 
 	erase_offset += FLASH_PAGE_SIZE;
+	if (erase_offset >= flash_area->fa_size) {
+		erase_offset = 0;
+		LOG_INF("Rollover");
+ 	}
+	k_work_reschedule(&background_erase, K_NO_WAIT);
+
+	return;
+
 
 	if (erase_offset < flash_area->fa_size) {
 		k_work_reschedule(&background_erase, K_NO_WAIT);
