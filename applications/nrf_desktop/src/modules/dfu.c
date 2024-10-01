@@ -264,12 +264,12 @@ static void background_erase_handler(struct k_work *work)
 	 * milliseconds let's perform it in background, when user is not
 	 * interacting with the device.
 	 */
-	if (device_in_use) {
-		device_in_use = false;
-		k_work_reschedule(&background_erase,
-				      BACKGROUND_FLASH_ERASE_TIMEOUT);
-		return;
-	}
+//	if (device_in_use) {
+//		device_in_use = false;
+//		k_work_reschedule(&background_erase,
+//				      BACKGROUND_FLASH_ERASE_TIMEOUT);
+//		return;
+//	}
 
 	if (!flash_area) {
 		err = flash_area_open(DFU_SLOT_ID, &flash_area);
