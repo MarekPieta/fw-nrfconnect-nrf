@@ -30,6 +30,8 @@ LOG_MODULE_REGISTER(flash_sync_mpsl);
 /* After this many us's, start using higher priority when requesting. */
 #define TIMESLOT_TIMEOUT_PRIORITY_NORMAL_US 30000
 
+static size_t i_cnt;
+
 struct mpsl_context {
 	/* This semaphore is taken with a timeout when the flash operation starts. */
 	struct k_sem timeout_sem;
@@ -70,7 +72,7 @@ static void reschedule_next_timeslot(void)
 	_context.timeslot_request.params.earliest.priority =
 		MPSL_TIMESLOT_PRIORITY_HIGH;
 	_context.timeslot_request.params.earliest.timeout_us =
-		MPSL_TIMESLOT_EARLIEST_TIMEOUT_MAX_US;
+		TIMESLOT_TIMEOUT_PRIORITY_NORMAL_US;
 	int32_t ret = mpsl_timeslot_request(_context.session_id,
 					    &_context.timeslot_request);
 
@@ -86,6 +88,16 @@ timeslot_callback(mpsl_timeslot_session_id_t session_id, uint32_t signal)
 
 	if (atomic_get(&_context.timeout_occured)) {
 		return NULL;
+	}
+
+	if (signal == MPSL_TIMESLOT_SIGNAL_START) {
+		i_cnt++;
+	} else if (signal == MPSL_TIMESLOT_SIGNAL_CANCELLED) {
+		printk("c %zu\n", i_cnt);
+	} else if (signal == MPSL_TIMESLOT_SIGNAL_BLOCKED) {
+		printk("b %zu\n", i_cnt);
+	} else if (signal == MPSL_TIMESLOT_SIGNAL_SESSION_CLOSED) {
+		printk("e %zu\n", i_cnt);
 	}
 
 	switch (signal) {
@@ -194,6 +206,9 @@ int nrf_flash_sync_exe(struct flash_op_desc *op_desc)
 	atomic_clear(&_context.timeout_occured);
 
 	__ASSERT_NO_MSG(k_sem_count_get(&_context.timeout_sem) == 0);
+
+	i_cnt++;
+	printk("s");
 
 	errcode = MULTITHREADING_LOCK_ACQUIRE();
 	__ASSERT_NO_MSG(errcode == 0);
