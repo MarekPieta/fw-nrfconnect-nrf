@@ -58,8 +58,15 @@ config DESKTOP_CONFIG_CHANNEL_DFU_ENABLE
 	bool "DFU over the config channel"
 	depends on DESKTOP_CONFIG_CHANNEL_ENABLE
 	depends on (SSF_SUIT_SERVICE_ENABLED || !SUIT)
+	imply SOC_FLASH_NRF_PARTIAL_ERASE if \
+		!PM_EXTERNAL_FLASH_MCUBOOT_SECONDARY
 	help
 	  This option enables DFU over the config channel.
+	  The option implies partial erase of nRF SoC FLASH in the driver
+	  configuration unless external memory is used for the secondary image
+	  slot. This ensures that erase is performed in time slices instead of
+	  blocking MCU for whole time needed to complete the erase operation.
+	  This allows MCU to perform other tasks between the time slices.
 
 if DESKTOP_CONFIG_CHANNEL_DFU_ENABLE
 
