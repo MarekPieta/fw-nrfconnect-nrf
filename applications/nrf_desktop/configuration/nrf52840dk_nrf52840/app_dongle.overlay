@@ -8,6 +8,7 @@
 		 * the RNG node for entropy exclusively.
 		 */
 		zephyr,entropy = &rng;
+                zephyr,bt-hci = &bt_hci_controller;
 	};
 
 	/* Configure DTS nodes used for USB next HID support. */
@@ -150,4 +151,12 @@
 			low-power-enable;
 		};
 	};
+};
+
+&bt_hci_controller {
+        status = "okay";
+};
+
+&bt_hci_sdc {
+        status = "disabled";
 };
