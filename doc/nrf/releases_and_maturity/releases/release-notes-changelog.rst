@@ -367,6 +367,9 @@ nRF Desktop
   * The :ref:`nrf_desktop_dfu_mcumgr` to enable the MCUmgr handler that is used to report the bootloader information (see the :kconfig:option:`CONFIG_MCUMGR_GRP_OS_BOOTLOADER_INFO` Kconfig option).
   * The MCUboot image configurations for the :ref:`zephyr:nrf54l15dk_nrf54l15` board to enable Link Time Optimization (LTO) (see the :kconfig:option:`CONFIG_LTO` Kconfig option) and reduce the memory footprint of the bootloader.
   * The partition memory configurations for the :ref:`zephyr:nrf54l15dk_nrf54l15` board to optimize the size of the MCUboot bootloader partition.
+  * The ``APPLICATION_CONFIG_DIR`` CMake option is set in application's :file:`CMakeLists.txt` file.
+    The CMake option was previously set in sysbuild's file:`CMakeLists.txt` file.
+    Change ensures proper behavior in case application source directory name is changed.
 
 nRF Machine Learning (Edge Impulse)
 -----------------------------------

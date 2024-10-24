@@ -14,6 +14,9 @@ project("nRF52 Desktop"
 
 ################################################################################
 
+# The application uses the configuration/<board> scheme for configuration files.
+set(APPLICATION_CONFIG_DIR "${CMAKE_CURRENT_LIST_DIR}/configuration/\${NORMALIZED_BOARD_TARGET}")
+
 assert(CONFIG_DESKTOP_HID_REPORT_DESC "HID report descriptor file must be specified")
 
 # NORDIC SDK APP START
