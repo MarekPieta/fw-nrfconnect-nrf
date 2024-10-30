@@ -202,7 +202,11 @@ nRF5340 Audio
 nRF Desktop
 -----------
 
-|no_changes_yet_note|
+* Added handling of :c:struct:`hid_report_subscriber_event` to :ref:`nrf_desktop_hid_forward`.
+  Handling the :c:struct:`hid_report_subscriber_event` allows to take into account the maximum number of reports with different ID, which can be processed by the subscriber (:c:member:`hid_report_subscriber_event.params.report_max`).
+* Integrated :ref:`nrf_desktop_hid_reportq` in :ref:`nrf_desktop_hid_forward`.
+  The HID report queue utility is used to locally enqueue reports at the source to prevent HID report drops.
+  The :ref:`CONFIG_DESKTOP_HID_REPORTQ_MAX_ENQUEUED_REPORTS <config_desktop_app_options>` Kconfig option needs to be used instead of :ref:`CONFIG_DESKTOP_HID_FORWARD_MAX_ENQUEUED_REPORTS <config_desktop_app_options>` Kconfig option.
 
 nRF Machine Learning (Edge Impulse)
 -----------------------------------
