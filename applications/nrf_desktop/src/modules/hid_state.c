@@ -868,7 +868,7 @@ static bool report_send(struct report_state *rs,
 	}
 
 	if (!check_state || (rs->state != STATE_DISCONNECTED)) {
-		unsigned int pipeline_depth = rs->subscriber->pipeline_size;
+		unsigned int pipeline_depth = 1;
 
 		if ((rs->report_id == REPORT_ID_CONSUMER_CTRL) ||
 		    (rs->report_id == REPORT_ID_SYSTEM_CTRL))  {
