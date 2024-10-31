@@ -35,20 +35,8 @@ class StatsNordic():
         self.logger.addHandler(self.logger_console)
 
     def calculate_stats_preset1(self, start_meas, end_meas):
-        self.time_between_events("hid_mouse_event_dongle", EventState.SUBMIT,
-                                 "hid_report_sent_event_device", EventState.SUBMIT,
-                                 0.05, start_meas, end_meas)
-        self.time_between_events("hid_mouse_event_dongle", EventState.SUBMIT,
-                                 "hid_report_sent_event_device", EventState.SUBMIT,
-                                 0.05, start_meas, end_meas)
-        self.time_between_events("hid_report_sent_event_dongle", EventState.SUBMIT,
-                                 "hid_report_sent_event_dongle", EventState.SUBMIT,
-                                 0.05, start_meas, end_meas)
-        self.time_between_events("hid_mouse_event_dongle", EventState.SUBMIT,
-                                 "hid_report_sent_event_dongle", EventState.SUBMIT,
-                                 0.05, start_meas, end_meas)
-        self.time_between_events("hid_mouse_event_device", EventState.SUBMIT,
-                                 "hid_mouse_event_dongle", EventState.SUBMIT,
+        self.time_between_events("hid_report_event", EventState.PROC_END,
+                                 "hid_report_sent_event", EventState.SUBMIT,
                                  0.05, start_meas, end_meas)
         plt.show()
 
