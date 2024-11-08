@@ -260,17 +260,6 @@ static void background_erase_handler(struct k_work *work)
 
 	__ASSERT_NO_MSG(!is_flash_area_clean);
 
-	/* During page erase operation CPU stalls. As page erase takes tens of
-	 * milliseconds let's perform it in background, when user is not
-	 * interacting with the device.
-	 */
-	if (device_in_use) {
-		device_in_use = false;
-		k_work_reschedule(&background_erase,
-				      BACKGROUND_FLASH_ERASE_TIMEOUT);
-		return;
-	}
-
 	if (!flash_area) {
 		err = flash_area_open(DFU_SLOT_ID, &flash_area);
 		if (err) {
@@ -287,7 +276,6 @@ static void background_erase_handler(struct k_work *work)
 
 	__ASSERT_NO_MSG(erase_offset + FLASH_PAGE_SIZE <= flash_area->fa_size);
 
-	if (!is_page_clean(flash_area, erase_offset, FLASH_PAGE_SIZE)) {
 		err = flash_area_erase(flash_area, erase_offset, FLASH_PAGE_SIZE);
 		if (err) {
 			LOG_ERR("Cannot erase page (%d)", err);
@@ -300,7 +288,6 @@ static void background_erase_handler(struct k_work *work)
 
 			return;
 		}
-	}
 
 	erase_offset += FLASH_PAGE_SIZE;
 
