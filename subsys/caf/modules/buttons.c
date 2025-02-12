@@ -49,6 +49,7 @@ enum state {
 static const struct device * const gpio_devs[] = {
 	DEVICE_DT_GET_OR_NULL(DT_NODELABEL(gpio0)),
 	DEVICE_DT_GET_OR_NULL(DT_NODELABEL(gpio1)),
+	DEVICE_DT_GET_OR_NULL(DT_NODELABEL(gpio2)),
 };
 static struct gpio_callback gpio_cb[ARRAY_SIZE(gpio_devs)];
 static struct k_work_delayable matrix_scan;

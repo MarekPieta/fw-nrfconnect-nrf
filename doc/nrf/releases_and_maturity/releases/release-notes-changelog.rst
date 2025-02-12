@@ -547,7 +547,7 @@ Bluetooth libraries and services
 Common Application Framework
 ----------------------------
 
-|no_changes_yet_note|
+* Added support for ``GPIO2`` port to :ref:`caf_buttons`.
 
 Debug libraries
 ---------------
