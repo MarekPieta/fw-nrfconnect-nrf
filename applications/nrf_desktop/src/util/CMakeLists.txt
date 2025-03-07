@@ -7,6 +7,9 @@
 target_sources_ifdef(CONFIG_DESKTOP_HID_EVENTQ
 		     app PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/hid_eventq.c)
 
+target_sources_ifdef(CONFIG_DESKTOP_HID_KEYS_STATE
+		     app PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/hid_keys_state.c)
+
 target_sources_ifdef(CONFIG_DESKTOP_HID_REPORTQ
 		     app PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/hid_reportq.c)
 
