@@ -7,8 +7,11 @@ USB state power manager module
    :local:
    :depth: 2
 
-The |usb_state_pm| is minor, stateless module that imposes an application power level restriction related to the USB state.
-The application power level is managed by the :ref:`power manager module <caf_power_manager>`.
+The |usb_state_pm| is minor, stateless module that imposes power state restrictions related to the USB state:
+
+* Application power level restrictions.
+  The application power level is managed by the :ref:`caf_power_manager`.
+* Zephyr's :ref:`zephyr:pm-system` latency restrictions.
 
 Module events
 *************
@@ -24,20 +27,36 @@ Configuration
 *************
 
 To enable the module, use the :ref:`CONFIG_DESKTOP_USB_PM_ENABLE <config_desktop_app_options>` Kconfig option.
-It depends on the options :ref:`CONFIG_DESKTOP_USB_ENABLE <config_desktop_app_options>` and :kconfig:option:`CONFIG_CAF_POWER_MANAGER`.
+It depends on the options :ref:`CONFIG_DESKTOP_USB_ENABLE <config_desktop_app_options>` and :kconfig:option:`CONFIG_CAF_PM_EVENTS`.
+
+If you use Zephyr's System Power Management (:kconfig:option:`CONFIG_PM`), the module automatically requires zero latency in the Power Management while USB is active.
+This is done to ensure high performance.
+The feature can be controlled with :ref:`CONFIG_DESKTOP_USB_PM_REQ_NO_PM_LATENCY <config_desktop_app_options>` Kconfig option.
 
 The log level is inherited from the :ref:`nrf_desktop_usb_state`.
 
 Implementation details
 **********************
 
-For the change of the restricted power level, the module reacts to :c:struct:`usb_state_event`.
-Upon reception of the event and depending on the current USB state, the module requests different power restrictions:
+The module reacts to :c:struct:`usb_state_event`.
+Upon reception of the event and depending on the current USB state, the module requests different power restrictions.
+For more information about the USB states in nRF Desktop, see the :ref:`nrf_desktop_usb_state`.
+
+Application power level
+=======================
+
+The application power level is imposed using :c:struct:`power_manager_restrict_event`.
 
 * If the USB state is set to :c:enum:`USB_STATE_POWERED`, the module restricts the power down level to the :c:enum:`POWER_MANAGER_LEVEL_SUSPENDED`.
 * If the USB state is set to :c:enum:`USB_STATE_ACTIVE`, the :c:enum:`POWER_MANAGER_LEVEL_ALIVE` is required.
 * If the USB state is set to :c:enum:`USB_STATE_DISCONNECTED`, any power level is allowed.
 * If the USB state is set to :c:enum:`USB_STATE_SUSPENDED`, the :c:enum:`POWER_MANAGER_LEVEL_SUSPENDED` is imposed.
-  The module restricts the power down level to the :c:enum:`POWER_MANAGER_LEVEL_SUSPENDED` and generates :c:struct:`force_power_down_event`.
+  The module restricts the power down level to the :c:enum:`POWER_MANAGER_LEVEL_SUSPENDED`.
+  The module also submits a :c:struct:`force_power_down_event` to force a quick power down.
 
-For more information about the USB states in nRF Desktop, see the :ref:`nrf_desktop_usb_state`.
+System Power Management latency
+===============================
+
+The System Power Management latency requirements are updated using :c:func:`pm_policy_latency_request_add` and :c:func:`pm_policy_latency_request_remove`.
+The zero latency requirement is added when USB state is set to :c:enum:`USB_STATE_ACTIVE`.
+The requrement is removed if USB enters another state.
