@@ -24,8 +24,31 @@ static struct k_thread thread;
 static K_THREAD_STACK_DEFINE(thread_stack, THREAD_STACK_SIZE);
 
 
+int log_settings_entry_cb(const char *key, size_t len, settings_read_cb read_cb, void *cb_arg,
+			  void *param)
+{
+	LOG_INF("\tkey: %s len: %zu", key, len);
+
+	return 0;
+}
+
+static void log_settings_content(void)
+{
+	LOG_INF("Settings entries start");
+
+	int err = settings_load_subtree_direct(NULL, log_settings_entry_cb, NULL);
+
+	if (err) {
+		LOG_ERR("settings_load_subtree_direct failed (%d)", err);
+	}
+
+	LOG_INF("Settings entries end");
+}
+
 static void load_settings_thread(void)
 {
+	log_settings_content();
+
 	LOG_INF("Settings load thread started");
 
 	int err = settings_load();
@@ -51,6 +74,8 @@ static void start_loading_thread(void)
 
 static void load_settings(void)
 {
+	log_settings_content();
+
 	if (IS_ENABLED(CONFIG_CAF_SETTINGS_LOADER_USE_THREAD)) {
 		start_loading_thread();
 	} else {
