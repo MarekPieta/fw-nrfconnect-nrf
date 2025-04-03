@@ -3240,6 +3240,17 @@ NCSIDB-925: Event subscribers in the :ref:`app_event_manager` may overlap when u
   Make sure that the event name does not start the same way as another event.
   For example, creating the following events: ``rx_event`` and ``rx_event_error_event`` would still cause the issue.
 
+.. rst-class:: wontfix v2-9-0-nRF54H20-1 v2-9-1 v2-9-0 v2-8-0 v2-7-0 v2-6-4 v2-6-3 v2-6-2 v2-6-1 v2-6-0 v2-5-3 v2-5-2 v2-5-1 v2-5-0 v2-4-4 v2-4-3 v2-4-2 v2-4-1 v2-4-0 v2-3-0 v2-2-0 v2-1-4 v2-1-3 v2-1-2 v2-1-1 v2-1-0 v2-0-2 v2-0-1 v2-0-0 v1-9-2 v1-9-1 v1-9-0 v1-8-0 v1-7-1 v1-7-0 v1-6-1 v1-6-0 v1-5-2 v1-5-1 v1-5-0 v1-4-2 v1-4-1 v1-4-0 v1-3-2 v1-3-1 v1-3-0 v1-2-1 v1-2-0 v1-1-0 v1-0-0 v0-4-0 v0-3-0
+
+NCSDK-31573: :ref:`caf_buttons` may fail to trigger system wakeup from system off
+  The issue replicates if a button is pressed right before system off (right before :ref:`caf_power_manager` calls :c:func:`sys_poweroff`).
+  The CAF Buttons module handles related GPIO interrupt (and disable the GPIO interrupt), but system off prevents the module from performing buttons scan.
+  The disabled GPIO interrupt prevents wakeup from system off on GPIO interrupt.
+
+  The issue is easier to replicate for configurations with logs enabled, because the :c:macro:`LOG_PANIC` macro call delays :c:func:`sys_poweroff` function execution.
+
+  **Workaround:** Cherry-pick commits with fix from `sdk-nrf PR #20177`_.
+
 Modem libraries
 ===============
 
