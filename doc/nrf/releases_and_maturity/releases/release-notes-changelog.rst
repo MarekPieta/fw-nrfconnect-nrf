@@ -382,6 +382,9 @@ nRF Desktop
     The option mitigates HID report rate drops during DFU image transfer through the nRF Desktop dongle.
   * Explicitly enabled the :kconfig:option:`CONFIG_BT_CTLR_ASSERT_HANDLER` Kconfig option in IPC radio image configurations of the nRF54H20 DK.
     This is done to use an assertion handler defined by the IPC radio image.
+  * Disabled the UDC DWC2 DMA (:kconfig:option:`CONFIG_UDC_DWC2_DMA`) support on nRF54H20 DK.
+    The DMA support is experimental, disabling the feature improve USB HID stability.
+    Since nRF Desktop uses only small HID reports (report size is smaller than 64 bytes), the DMA is not needed.
 
 * Removed:
 
