@@ -61,25 +61,7 @@ enum state {
 				  IS_ENABLED(CONFIG_DESKTOP_HID_BOOT_INTERFACE_MOUSE) +		\
 				  IS_ENABLED(CONFIG_DESKTOP_HID_BOOT_INTERFACE_KEYBOARD))
 
-#define ITEM_COUNT MAX(MAX(MOUSE_REPORT_BUTTON_COUNT_MAX,	\
-			   KEYBOARD_REPORT_KEY_COUNT_MAX),	\
-		       MAX(SYSTEM_CTRL_REPORT_KEY_COUNT_MAX,	\
-			   CONSUMER_CTRL_REPORT_KEY_COUNT_MAX))
-
 #define AXIS_COUNT (IS_ENABLED(CONFIG_DESKTOP_HID_REPORT_MOUSE_SUPPORT) * MOUSE_REPORT_AXIS_COUNT)
-
-/**@brief HID state item. */
-struct item {
-	uint16_t usage_id; /**< HID usage ID. */
-	int16_t value; /**< HID value. */
-};
-
-/**@brief Structure keeping state for a single target HID report. */
-struct items {
-	uint8_t item_count_max; /**< Maximal numer of items in this set. */
-	uint8_t item_count; /**< Current number of items in this set. */
-	struct item item[ITEM_COUNT]; /**< Items set. Browse from the end. */
-};
 
 /**@brief Axis data. */
 struct axis_data {
@@ -88,8 +70,8 @@ struct axis_data {
 };
 
 struct report_data {
-	struct items items;
 	struct hid_eventq eventq;
+	struct hid_keys_state keys_state;
 	struct axis_data axes;
 	struct report_state *linked_rs;
 };
@@ -162,40 +144,6 @@ static struct hid_keymap *hid_keymap_get(uint16_t key_id)
 	return map;
 }
 
-/**@brief Compare two usage values. */
-static int usage_id_compare(const void *a, const void *b)
-{
-	const struct item *p_a = a;
-	const struct item *p_b = b;
-
-	return (p_a->usage_id - p_b->usage_id);
-}
-
-static void sort_by_usage_id(struct item items[], size_t array_size)
-{
-	for (size_t k = 0; k < array_size; k++) {
-		size_t id = k;
-
-		for (size_t l = k + 1; l < array_size; l++) {
-			if (items[l].usage_id < items[id].usage_id) {
-				id = l;
-			}
-		}
-		if (id != k) {
-			struct item tmp = items[k];
-
-			items[k] = items[id];
-			items[id] = tmp;
-		}
-	}
-}
-
-static void clear_items(struct items *items)
-{
-	memset(items->item, 0, sizeof(items->item));
-	items->item_count = 0;
-}
-
 static void clear_axes(struct axis_data *axes)
 {
 	memset(axes->axis, 0, sizeof(axes->axis));
@@ -206,7 +154,7 @@ static void clear_report_data(struct report_data *rd)
 	LOG_INF("Clear report data (%p)", (void *)rd);
 
 	clear_axes(&rd->axes);
-	clear_items(&rd->items);
+	hid_keys_state_clear(&rd->keys_state);
 	hid_eventq_reset(&rd->eventq);
 }
 
@@ -268,77 +216,6 @@ static struct subscriber *get_linked_subscriber(uint8_t report_id)
 	struct report_state *rs = rd->linked_rs;
 
 	return rs ? rs->subscriber : NULL;
-}
-
-static bool key_value_set(struct items *items, uint16_t usage_id, int16_t value)
-{
-	const uint8_t prev_item_count = items->item_count;
-
-	bool update_needed = false;
-	struct item *p_item;
-
-	__ASSERT_NO_MSG(usage_id != 0);
-	__ASSERT_NO_MSG(items->item_count_max > 0);
-
-	/* Report equal to zero brings no change. This should never happen. */
-	__ASSERT_NO_MSG(value != 0);
-
-	struct item i = {
-		.usage_id = usage_id,
-	};
-
-	p_item = bsearch(&i,
-			 items->item,
-			 ARRAY_SIZE(items->item),
-			 sizeof(items->item[0]),
-			 usage_id_compare);
-
-	if (p_item) {
-		/* Item is present in the array - update its value. */
-		p_item->value += value;
-		if (p_item->value == 0) {
-			__ASSERT_NO_MSG(items->item_count != 0);
-			items->item_count -= 1;
-			p_item->usage_id = 0;
-		}
-
-		update_needed = true;
-	} else if (value < 0) {
-		/* For items with absolute value, the value is used as
-		 * a reference counter and must not fall below zero. This
-		 * could happen if a key up event is lost and the state
-		 * receives an unpaired key down event.
-		 */
-	} else if (prev_item_count >= items->item_count_max) {
-		/* Configuration should allow the HID module to hold data
-		 * about the maximum number of simultaneously pressed keys.
-		 * Generate a warning if an item cannot be recorded.
-		 */
-		LOG_WRN("No place on the list to store HID item!");
-	} else {
-		/* After sort operation, free slots (zeros) are stored
-		 * at the beginning of the array.
-		 */
-		size_t const idx = ARRAY_SIZE(items->item) - prev_item_count - 1;
-
-		__ASSERT_NO_MSG(items->item[idx].usage_id == 0);
-
-		/* Record this value change. */
-		items->item[idx].usage_id = usage_id;
-		items->item[idx].value = value;
-		items->item_count += 1;
-
-		update_needed = true;
-	}
-
-	if (prev_item_count != items->item_count) {
-		/* Sort elements on the list. Use simple algorithm
-		 * with small footprint.
-		 */
-		sort_by_usage_id(items->item, ARRAY_SIZE(items->item));
-	}
-
-	return update_needed;
 }
 
 static void send_report_keyboard(struct report_state *rs, struct report_data *rd)
