@@ -17,6 +17,14 @@ HID reports
 
 .. doxygengroup:: nrf_desktop_hid_reports
 
+HID events
+**********
+
+| Header file: :file:`applications/nrf_desktop/src/events/hid_event.h`
+| Source file: :file:`applications/nrf_desktop/src/events/hid_event.c`
+
+.. doxygengroup:: nrf_desktop_hid_event
+
 LED states
 **********
 
