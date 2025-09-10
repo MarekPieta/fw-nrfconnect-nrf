@@ -43,6 +43,15 @@ static bool boot_mode;
 static const struct hid_state_api *hid_state_api;
 static struct report_data report_data;
 
+static struct k_work_delayable init_work;
+
+static void init(void);
+
+static void init_work_fn(struct k_work *w)
+{
+		LOG_INF("Init mouse report provider");
+		init();
+}
 
 static void clear_report_data(struct report_data *rd)
 {
@@ -369,8 +378,8 @@ static bool handle_button_event(const struct button_event *event)
 static bool handle_module_state_event(const struct module_state_event *event)
 {
 	if (check_state(event, MODULE_ID(main), MODULE_STATE_READY)) {
-		LOG_INF("Init mouse report provider");
-		init();
+		k_work_init_delayable(&init_work, init_work_fn);
+		k_work_reschedule(&init_work, K_MSEC(2000));
 	}
 
 	return false;
