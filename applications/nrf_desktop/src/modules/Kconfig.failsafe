@@ -8,8 +8,6 @@ menu "Failsafe erase"
 
 config DESKTOP_FAILSAFE_ENABLE
 	bool "Enable failsafe"
-	depends on WATCHDOG
-	depends on !RESET_ON_FATAL_ERROR
 	select HWINFO
 	help
 	  When a device is rebooted by watchdog or due to the CPU lockup,
