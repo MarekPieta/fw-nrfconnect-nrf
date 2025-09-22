@@ -250,7 +250,7 @@ static int motion_read(bool send_event)
 		} else {
 			nodata = 0;
 
-			return -ENODATA;
+			err = -ENODATA;
 		}
 	} else {
 		nodata = 0;
@@ -260,6 +260,8 @@ static int motion_read(bool send_event)
 
 	event->dx = value_x.val1;
 	event->dy = value_y.val1;
+	event->active = (err != -ENODATA);
+
 	APP_EVENT_SUBMIT(event);
 
 	return err;
