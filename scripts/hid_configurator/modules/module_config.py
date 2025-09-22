@@ -8,6 +8,11 @@ import collections
 
 ConfigOption = collections.namedtuple('ConfigOption', 'range option_name help type')
 
+MOTION_SIM_OPTIONS = {
+    'active': ConfigOption((0, 1), 'active', 'Enable/disable generating motion', int),
+    'busy_wait_us': ConfigOption((0, 1000000), 'busy_wait_us', 'Busy wait while generating motion [us]', int),
+}
+
 MOTION_PMW3360_OPTIONS = {
     'downshift_run':    ConfigOption((10,   2550),   'downshift',   'Run to Rest 1 switch time [ms]', int),
     'downshift_rest1':  ConfigOption((320,  81600),  'rest1', 'Rest 1 to Rest 2 switch time [ms]', int),
@@ -64,6 +69,10 @@ MODULE_CONFIG = {
 
     'motion/pmw3360' : {
         'options' : MOTION_PMW3360_OPTIONS
+    },
+
+    'motion/sim' : {
+        'options' : MOTION_SIM_OPTIONS
     },
 
     'ble_qos' : {
