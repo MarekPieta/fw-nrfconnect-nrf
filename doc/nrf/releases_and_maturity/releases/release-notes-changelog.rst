@@ -248,6 +248,8 @@ nRF Desktop
       The public key used by MCUboot for validating the application image is securely stored in the KMU hardware peripheral.
       To simplify the programming procedure, the application is configured to use the automatic KMU provisioning.
       The KMU provisioning is performed by the west runner as a part of the ``west flash`` command when the ``--erase`` or ``--recover`` flag is used.
+    * The :ref:`nrf_desktop_hid_state` to allow for delayed registration of HID report providers.
+      Before the change was introduced, subscribing to a HID input report before the respective provider was registered triggered an assertion failure.
 
 nRF Machine Learning (Edge Impulse)
 -----------------------------------
