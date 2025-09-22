@@ -4,11 +4,13 @@
  */
 
 #include <zephyr/kernel.h>
+#include <zephyr/sys/byteorder.h>
 
 #include <app_event_manager.h>
 #include "motion_event.h"
 #include <caf/events/power_event.h>
 #include "hid_event.h"
+#include "config_event.h"
 
 #include <zephyr/shell/shell.h>
 
@@ -19,6 +21,7 @@
 LOG_MODULE_REGISTER(MODULE, CONFIG_DESKTOP_MOTION_LOG_LEVEL);
 
 #define SCALE CONFIG_DESKTOP_MOTION_SIMULATED_SCALE_FACTOR
+#define MODULE_VARIANT	"sim"
 
 enum state {
 	STATE_DISCONNECTED,
@@ -54,8 +57,23 @@ static enum state state;
 /* If shell is enabled, wait for shell command to start generating motion.
  * Otherwise, start generating motion right after boot.
  */
-static bool generating_motion = !IS_ENABLED(CONFIG_SHELL);
+static bool generating_motion = !IS_ENABLED(CONFIG_SHELL) && !IS_ENABLED(CONFIG_DESKTOP_CONFIG_CHANNEL_ENABLE);
 
+static uint32_t motion_sim_busy_wait_us = CONFIG_DESKTOP_MOTION_SIMULATED_BUSY_WAIT_US;
+
+enum sensor_opt {
+        SENSOR_OPT_VARIANT,
+        SENSOR_OPT_ACTIVE,
+        SENSOR_OPT_BUSY_WAIT_US,
+
+        SENSOR_OPT_COUNT
+};
+
+static const char * const opt_descr[] = {
+        [SENSOR_OPT_VARIANT] = OPT_DESCR_MODULE_VARIANT,
+        [SENSOR_OPT_ACTIVE] = "active",
+        [SENSOR_OPT_BUSY_WAIT_US] = "busy_wait_us",
+};
 
 static void motion_event_send(int16_t dx, int16_t dy, bool active)
 {
@@ -110,10 +128,65 @@ static void generate_motion_event(void)
 
 	generate_new_position(&x_new, &y_new);
 
+	k_busy_wait(motion_sim_busy_wait_us);
 	motion_event_send(x_new - x_cur, y_new - y_cur, generating_motion);
 
 	x_cur = x_new;
 	y_cur = y_new;
+}
+
+static void update_config(const uint8_t opt_id, const uint8_t *data, const size_t size)
+{
+	switch (opt_id) {
+	case SENSOR_OPT_ACTIVE:
+		/* TODO check size!! */
+		if (data[0] == 0x01) {
+			generating_motion = true;
+			if (state == STATE_IDLE) {
+				state = STATE_FETCHING;
+				generate_motion_event();
+			}
+		} else if (data[0] == 0x00) {
+			generating_motion = false;
+		}
+		break;
+
+	case SENSOR_OPT_BUSY_WAIT_US:
+		if (size == sizeof(motion_sim_busy_wait_us)) {
+			motion_sim_busy_wait_us = sys_get_le32(data);
+		} else {
+			LOG_WRN("Invalid data size of SENSOR_OPT_BUSY_WAIT_US: %zu", size);
+		}
+		break;
+
+	default:
+		LOG_WRN("Unknown opt %" PRIu8, opt_id);
+		return;
+	}
+}
+
+static void fetch_config(const uint8_t opt_id, uint8_t *data, size_t *size)
+{
+	switch (opt_id) {
+	case SENSOR_OPT_VARIANT:
+		*size = strlen(MODULE_VARIANT);
+		__ASSERT_NO_MSG((*size != 0) && (*size < CONFIG_CHANNEL_FETCHED_DATA_MAX_SIZE));
+		strcpy(data, MODULE_VARIANT);
+		break;
+
+	case SENSOR_OPT_ACTIVE:
+		data[0] = generating_motion ? (0x01) : (0x00);
+		*size = 1;
+		break;
+
+	case SENSOR_OPT_BUSY_WAIT_US:
+		sys_put_le32(motion_sim_busy_wait_us, data);
+		*size = sizeof(motion_sim_busy_wait_us);
+		break;
+
+	default:
+		LOG_WRN("Unknown opt: %" PRIu8, opt_id);
+	}
 }
 
 static bool app_event_handler(const struct app_event_header *aeh)
@@ -222,6 +295,8 @@ static bool app_event_handler(const struct app_event_header *aeh)
 		return false;
 	}
 
+	GEN_CONFIG_EVENT_HANDLERS(STRINGIFY(MODULE), opt_descr, update_config, fetch_config);
+
 	/* If event is unhandled, unsubscribe. */
 	__ASSERT_NO_MSG(false);
 
@@ -236,6 +311,9 @@ APP_EVENT_SUBSCRIBE(MODULE, wake_up_event);
 #endif
 APP_EVENT_SUBSCRIBE(MODULE, hid_report_sent_event);
 APP_EVENT_SUBSCRIBE(MODULE, hid_report_subscription_event);
+#if CONFIG_DESKTOP_CONFIG_CHANNEL_ENABLE
+APP_EVENT_SUBSCRIBE_EARLY(MODULE, config_event);
+#endif
 
 #if CONFIG_SHELL
 
