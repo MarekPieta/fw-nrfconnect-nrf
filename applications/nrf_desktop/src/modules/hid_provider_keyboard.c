@@ -36,6 +36,17 @@ static const void *active_sub;
 static bool boot_mode;
 static struct report_data report_data;
 
+static struct k_work_delayable init_work;
+
+static bool initialized;
+
+static void init(void);
+
+static void init_work_fn(struct k_work *w)
+{
+	LOG_INF("Init keyboard report provider");
+	init();
+}
 
 static void clear_report_data(struct report_data *rd)
 {
@@ -287,6 +298,11 @@ static void handle_button(uint16_t usage_id, bool pressed)
 
 static bool handle_button_event(const struct button_event *event)
 {
+	if (!initialized) {
+		/* Skip */
+		return false;
+	}
+
 	/* Get usage ID and target report from HID Keymap */
 	const struct hid_keymap *map = hid_keymap_get(event->key_id);
 
@@ -333,13 +349,15 @@ static void init(void)
 		rp_event->hid_state_api = NULL;
 		APP_EVENT_SUBMIT(rp_event);
 	}
+
+	initialized = true;
 }
 
 static bool handle_module_state_event(const struct module_state_event *event)
 {
 	if (check_state(event, MODULE_ID(main), MODULE_STATE_READY)) {
-		LOG_INF("Init keyboard report provider");
-		init();
+		k_work_init_delayable(&init_work, init_work_fn);
+		k_work_reschedule(&init_work, K_MSEC(10000));
 	}
 
 	return false;
