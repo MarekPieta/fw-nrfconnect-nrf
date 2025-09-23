@@ -7,6 +7,7 @@ import argparse
 import logging
 import os
 import pprint
+import time
 
 if os.name == "nt":
     try:
@@ -223,6 +224,9 @@ def parse_arguments():
     parser_stream.add_argument('freq', type=int, help='Color change frequency (in Hz)')
     parser_stream.add_argument('--file', type=str, help='Selected audio file (*.wav)')
 
+    parser_performance_test = sp_commands.add_parser('performance_test',
+                                                     help='Perform performance test with simulated motion')
+
     assert isinstance(MODULE_CONFIG, dict)
     parser_config = sp_commands.add_parser('config',
                                            help='Configuration option set/fetch')
@@ -255,6 +259,26 @@ def parse_arguments():
                                                           module_opts[opt_name].range))
 
     return parser.parse_args()
+
+def perform_performance_test(dev, args):
+    module_name = 'motion/sim'
+    option_name_active = 'active'
+    option_name_bw = 'busy_wait_us'
+
+    module_config = MODULE_CONFIG[module_name]
+    option_config_active = module_config['options'][option_name_active]
+    option_config_bw = module_config['options'][option_name_bw]
+
+    for busy_wait in range(0, 1100, 100):
+        success = change_config(dev, module_name, option_name_active, 0, option_config_active)
+        time.sleep(1)
+        success = change_config(dev, module_name, option_name_bw, busy_wait, option_config_bw)
+
+        if success:
+                print('{} {} set to {}'.format(module_name, option_name_bw, busy_wait))
+        success = change_config(dev, module_name, option_name_active, 1, option_config_active)
+
+        time.sleep(5)
 
 
 def configurator():
@@ -294,7 +318,8 @@ configurator.ALLOWED_COMMANDS = {
     'devinfo' : perform_devinfo,
     'fwreboot' : perform_fwreboot,
     'config' : perform_config,
-    'led_stream' : perform_led_stream
+    'led_stream' : perform_led_stream,
+    'performance_test' : perform_performance_test
 }
 
 
