@@ -7,6 +7,7 @@ import argparse
 import logging
 import os
 import pprint
+import time
 
 if os.name == "nt":
     try:
@@ -223,6 +224,12 @@ def parse_arguments():
     parser_stream.add_argument('freq', type=int, help='Color change frequency (in Hz)')
     parser_stream.add_argument('--file', type=str, help='Selected audio file (*.wav)')
 
+    parser_performance_test = sp_commands.add_parser('performance_test',
+                                                     help='Perform performance test with simulated motion')
+    parser_performance_test.add_argument('--min_delay', type=int, default=0, help='Mininum delay [us]')
+    parser_performance_test.add_argument('--max_delay', type=int, default=1000, help='Maximum delay [us]')
+    parser_performance_test.add_argument('--delay_step', type=int, default=100, help='Delay step [us]')
+
     assert isinstance(MODULE_CONFIG, dict)
     parser_config = sp_commands.add_parser('config',
                                            help='Configuration option set/fetch')
@@ -255,6 +262,26 @@ def parse_arguments():
                                                           module_opts[opt_name].range))
 
     return parser.parse_args()
+
+def perform_performance_test(dev, args):
+    module_name = 'motion/sim'
+    option_name_active = 'active'
+    option_name_bw = 'busy_wait_us'
+
+    module_config = MODULE_CONFIG[module_name]
+    option_config_active = module_config['options'][option_name_active]
+    option_config_bw = module_config['options'][option_name_bw]
+
+    for busy_wait in range(args.min_delay, args.max_delay, args.delay_step):
+        success = change_config(dev, module_name, option_name_active, 0, option_config_active)
+        time.sleep(1)
+        success = change_config(dev, module_name, option_name_bw, busy_wait, option_config_bw)
+
+        if success:
+                print('{} {} set to {}'.format(module_name, option_name_bw, busy_wait))
+        success = change_config(dev, module_name, option_name_active, 1, option_config_active)
+
+        time.sleep(5)
 
 
 def configurator():
@@ -294,7 +321,8 @@ configurator.ALLOWED_COMMANDS = {
     'devinfo' : perform_devinfo,
     'fwreboot' : perform_fwreboot,
     'config' : perform_config,
-    'led_stream' : perform_led_stream
+    'led_stream' : perform_led_stream,
+    'performance_test' : perform_performance_test
 }
 
 
