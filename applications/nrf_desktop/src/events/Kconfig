@@ -11,6 +11,13 @@ config DESKTOP_HID_REPORT_PROVIDER_EVENT
 	help
 	  Enable HID report provider events in nRF Desktop application.
 
+config DESKTOP_HID_REPORT_SYNC_EVENT
+	bool "HID report synchronization events"
+	help
+	  Enable HID report synchronization events in nRF Desktop application.
+	  The events are used to synchronize sampling sensors to HID input
+	  report transmission.
+
 rsource "Kconfig.log"
 
 endmenu
