@@ -12,7 +12,7 @@
 #include <app_event_manager.h>
 #include <caf/events/button_event.h>
 #include "motion_event.h"
-#include "hid_event.h"
+#include "hid_report_sync_event.h"
 
 #define MODULE motion
 #include <caf/events/module_state_event.h>
@@ -48,6 +48,7 @@ static motion_ts timestamp[DIR_COUNT];
 static int32_t x_remainder;
 static int32_t y_remainder;
 
+static uint8_t connected_report_id = REPORT_ID_COUNT;
 static enum state state;
 
 
@@ -203,10 +204,10 @@ static bool handle_module_state_event(const struct module_state_event *event)
 }
 
 
-static bool handle_hid_report_sent_event(const struct hid_report_sent_event *event)
+static bool handle_hid_report_sync_heartbeat_event(
+	const struct hid_report_sync_heartbeat_event *event)
 {
-	if ((event->report_id == REPORT_ID_MOUSE) ||
-	    (event->report_id == REPORT_ID_BOOT_MOUSE)) {
+	if (event->report_id == connected_report_id) {
 		if (state == STATE_FETCHING) {
 			send_motion();
 			if (!is_motion_active()) {
@@ -218,31 +219,20 @@ static bool handle_hid_report_sent_event(const struct hid_report_sent_event *eve
 	return false;
 }
 
-static bool handle_hid_report_subscription_event(const struct hid_report_subscription_event *event)
+static bool handle_hid_report_sync_event(const struct hid_report_sync_event *event)
 {
-	if ((event->report_id == REPORT_ID_MOUSE) ||
-	    (event->report_id == REPORT_ID_BOOT_MOUSE)) {
-		static uint8_t peer_count;
-
-		if (event->enabled) {
-			__ASSERT_NO_MSG(peer_count < UCHAR_MAX);
-			peer_count++;
-		} else {
-			__ASSERT_NO_MSG(peer_count > 0);
-			peer_count--;
-		}
-
-		bool is_connected = (peer_count != 0);
-
-		if ((state == STATE_DISCONNECTED) && is_connected) {
+	if (module_flags_test_bit(&event->module_flags, MODULE_IDX(MODULE))) {
+		if ((state == STATE_DISCONNECTED) && event->enable) {
 			state = is_motion_active() ? STATE_FETCHING : STATE_IDLE;
 			if (state == STATE_FETCHING) {
 				clear_accumulated_motion();
 				send_motion();
 			}
-		} else if ((state != STATE_DISCONNECTED) && !is_connected) {
+		} else if ((state != STATE_DISCONNECTED) && !event->enable) {
 			state = STATE_DISCONNECTED;
 		}
+
+		connected_report_id = event->enable ? event->report_id : REPORT_ID_COUNT;
 	}
 
 	return false;
@@ -250,8 +240,9 @@ static bool handle_hid_report_subscription_event(const struct hid_report_subscri
 
 static bool app_event_handler(const struct app_event_header *aeh)
 {
-	if (is_hid_report_sent_event(aeh)) {
-		return handle_hid_report_sent_event(cast_hid_report_sent_event(aeh));
+	if (is_hid_report_sync_heartbeat_event(aeh)) {
+		return handle_hid_report_sync_heartbeat_event(
+			cast_hid_report_sync_heartbeat_event(aeh));
 	}
 
 	if (is_button_event(aeh)) {
@@ -262,9 +253,8 @@ static bool app_event_handler(const struct app_event_header *aeh)
 		return handle_module_state_event(cast_module_state_event(aeh));
 	}
 
-	if (is_hid_report_subscription_event(aeh)) {
-		return handle_hid_report_subscription_event(
-				cast_hid_report_subscription_event(aeh));
+	if (is_hid_report_sync_event(aeh)) {
+		return handle_hid_report_sync_event(cast_hid_report_sync_event(aeh));
 	}
 
 	/* If event is unhandled, unsubscribe. */
@@ -275,5 +265,5 @@ static bool app_event_handler(const struct app_event_header *aeh)
 APP_EVENT_LISTENER(MODULE, app_event_handler);
 APP_EVENT_SUBSCRIBE_EARLY(MODULE, button_event);
 APP_EVENT_SUBSCRIBE(MODULE, module_state_event);
-APP_EVENT_SUBSCRIBE(MODULE, hid_report_sent_event);
-APP_EVENT_SUBSCRIBE(MODULE, hid_report_subscription_event);
+APP_EVENT_SUBSCRIBE(MODULE, hid_report_sync_event);
+APP_EVENT_SUBSCRIBE(MODULE, hid_report_sync_heartbeat_event);

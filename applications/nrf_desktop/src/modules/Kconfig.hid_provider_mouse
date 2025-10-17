@@ -9,6 +9,7 @@ config DESKTOP_HID_REPORT_PROVIDER_MOUSE
 	default y if !DESKTOP_HID_REPORT_PROVIDER_MOUSE_ALT
 	depends on DESKTOP_HID_REPORT_MOUSE_SUPPORT
 	select DESKTOP_HID_KEYMAP
+	select DESKTOP_HID_REPORT_SYNC_EVENT
 	help
 	  This option automatically enables the default HID mouse report
 	  provider for HID peripheral that supports HID mouse report.
