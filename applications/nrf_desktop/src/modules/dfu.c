@@ -314,6 +314,7 @@ static void background_erase_handler(struct k_work *work)
 	__ASSERT_NO_MSG(erase_offset + FLASH_PAGE_SIZE <= flash_area->fa_size);
 
 	if (!is_page_clean(flash_area, erase_offset, FLASH_PAGE_SIZE)) {
+		LOG_ERR("####Erase %u", erase_offset);
 		err = flash_area_erase(flash_area, erase_offset, FLASH_PAGE_SIZE);
 		if (err) {
 			LOG_ERR("Cannot erase page (%d)", err);
@@ -941,6 +942,7 @@ static bool app_event_handler(const struct app_event_header *aeh)
 				__ASSERT_NO_MSG(!ret);
 				ARG_UNUSED(ret);
 			}
+			device_in_use = true;
 
 			k_work_reschedule(&background_erase, K_NO_WAIT);
 		}

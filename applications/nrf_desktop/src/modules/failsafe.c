@@ -83,6 +83,7 @@ static bool app_event_handler(const struct app_event_header *aeh)
 
 			err = failsafe_check(&failure_detected);
 			if (!err && failure_detected) {
+				k_panic();
 				err = failsafe_erase();
 			}
 
