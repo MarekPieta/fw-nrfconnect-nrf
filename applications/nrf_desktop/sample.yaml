@@ -170,6 +170,13 @@ tests:
     integration_platforms:
       - nrf52840dk/nrf52840
     extra_args: FILE_SUFFIX=keyboard
+  applications.nrf_desktop.zdebug_keyboard_selective_usb_sub:
+    build_only: true
+    platform_allow:
+      - nrf52840dk/nrf52840
+    integration_platforms:
+      - nrf52840dk/nrf52840
+    extra_args: FILE_SUFFIX=keyboard_selective_usb_sub
   applications.nrf_desktop.zrelease_keyboard:
     build_only: true
     platform_allow:
