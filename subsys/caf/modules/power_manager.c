@@ -33,6 +33,7 @@ LOG_MODULE_REGISTER(MODULE, CONFIG_CAF_POWER_MANAGER_LOG_LEVEL);
 #define POWER_DOWN_CHECK_INTERVAL_SEC 1
 #define POWER_DOWN_CHECK_INTERVAL     K_SECONDS(POWER_DOWN_CHECK_INTERVAL_SEC)
 
+#include <zephyr/bluetooth/bluetooth.h>
 
 enum power_state {
 	POWER_STATE_IDLE,
@@ -143,6 +144,14 @@ static void system_off_post_action(void)
 		nrfx_reset_reason_clear(nrfx_reset_reason_get());
 	}
 #endif
+
+	int err = bt_disable();
+
+	if (err) {
+		LOG_ERR("bt_disable failed (err: %d)", err);
+	} else {
+		LOG_WRN("bt_disabled");
+	}
 
 	/* Ensure that logs are displayed. */
 	LOG_PANIC();
