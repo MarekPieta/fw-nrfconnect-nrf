@@ -37,6 +37,8 @@ static int failsafe_check(bool *failure_detected)
 
 static int failsafe_erase(void)
 {
+	return 0;
+
 	const struct flash_area *flash_area;
 	int err = flash_area_open(FIXED_PARTITION_ID(storage_partition),
 				  &flash_area);
